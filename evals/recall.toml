@@ -1,0 +1,93 @@
+# 思い出す質を測るための評価セット。
+# 架空の会話で書く。利用者の実際の会話をここへ置かない。
+#
+# within: 期待したやりとりが何位までに入れば満たしたとするか。
+#
+# 期待するやりとりは、並びの前のほうへ置くこと。直近として渡るやりとりは
+# 意味で探す側に現れないため、後ろへ置くと測れない（ADR-015）。
+
+within = 3
+
+# あらかじめ覚えさせる一往復。名前で件から指す。
+
+[[exchange]]
+name = "tomato"
+utterance = "ベランダにトマトの苗を植えました"
+reply = "いいですね。日当たりに気をつけてください。"
+
+[[exchange]]
+name = "watering"
+utterance = "水やりは朝と夕方どちらがいいですか"
+reply = "朝がおすすめです。"
+
+[[exchange]]
+name = "tax"
+utterance = "住民税の納付書が届きました"
+reply = "期限をお忘れなく。"
+
+[[exchange]]
+name = "train"
+utterance = "電車が遅れて会議に間に合いませんでした"
+reply = "それは大変でしたね。"
+
+[[exchange]]
+name = "books"
+utterance = "図書館で小説を三冊借りました"
+reply = "読むのが楽しみですね。"
+
+[[exchange]]
+name = "keyboard"
+utterance = "新しい鍵盤楽器が届きました"
+reply = "どんな音か気になります。"
+
+[[exchange]]
+name = "laundry"
+utterance = "洗濯物がよく乾きました"
+reply = "よいお天気だったのですね。"
+
+[[exchange]]
+name = "movie"
+utterance = "昨日は古い映画を観ました"
+reply = "どんなお話でしたか。"
+
+[[exchange]]
+name = "dentist"
+utterance = "歯医者の予約を来週に取りました"
+reply = "早めに診てもらえてよかったですね。"
+
+[[exchange]]
+name = "neighbor"
+utterance = "近所で工事が始まるそうです"
+reply = "音が気になりそうですね。"
+
+# 測る件。
+
+[[case]]
+name = "同じ語で引く"
+utterance = "トマトはその後どうなりましたか"
+expected = ["tomato"]
+forbidden = ["tax"]
+
+[[case]]
+name = "言い換えで引く"
+utterance = "ベランダの野菜、そろそろ肥料をあげたほうがいいでしょうか"
+expected = ["tomato"]
+forbidden = ["tax", "train"]
+
+[[case]]
+name = "近い話題どうしを両方引く"
+utterance = "植物の世話について教えてください"
+expected = ["tomato", "watering"]
+forbidden = ["train"]
+
+[[case]]
+name = "手続きの話を引く"
+utterance = "納付書の期限はいつまででしたか"
+expected = ["tax"]
+forbidden = ["tomato"]
+
+[[case]]
+name = "どれとも関係ない話"
+utterance = "為替の見通しはどうでしょうか"
+expected = []
+forbidden = ["tomato", "tax", "train", "books"]
