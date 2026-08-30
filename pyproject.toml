@@ -3,7 +3,9 @@ name = "yadori"
 version = "0.0.0"
 description = "続く記憶と気持ちを持ち、話しかけられていない間も動く常駐プログラム"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "anthropic>=0.40",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -11,6 +13,9 @@ dev = [
     "mypy>=1.11",
     "ruff>=0.6",
 ]
+
+[project.scripts]
+yadori = "yadori.infrastructure.start:main"
 
 [build-system]
 requires = ["hatchling"]
