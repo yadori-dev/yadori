@@ -37,6 +37,40 @@ def references(path: Path) -> set[str]:
     return set(REFERENCE.findall(path.read_text(encoding="utf-8")))
 
 
+def paired(path: Path, upper: str, lower: str) -> list[str]:
+    """増分の中で、上位の判断と、それを確かめるテストが対になっているかを見る。
+
+    対応する ST が無い SPEC は、満たしたかを判定できない。上位を指さない ST は、
+    作る理由が無い。AD と IT も同じである。
+    """
+    uppers: set[str] = set()
+    lowers: dict[str, set[str]] = {}
+    row = re.compile(r"^\|\s*`(?P<id>(?:" + upper + "|" + lower + r")-\d{3})`")
+    reference = re.compile(r"`(" + upper + r"-\d{3})`")
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = row.match(line)
+        if not match:
+            continue
+        identifier = match.group("id")
+        if identifier.startswith(upper + "-"):
+            uppers.add(identifier)
+        else:
+            lowers[identifier] = set(reference.findall(line))
+
+    errors: list[str] = []
+    for identifier, refs in sorted(lowers.items()):
+        if not refs:
+            errors.append(f"{path.name}: {identifier} が対応する {upper} を指していない")
+        for ref in sorted(refs - uppers):
+            errors.append(f"{path.name}: {identifier} が同じ増分に無い {ref} を指している")
+
+    covered = {ref for refs in lowers.values() for ref in refs}
+    for identifier in sorted(uppers - covered):
+        errors.append(f"{path.name}: {identifier} を確かめる {lower} が無い")
+    return errors
+
+
 def main(argv: list[str]) -> int:
     root = Path(argv[1]).resolve() if len(argv) > 1 else DEFAULT_ROOT
     requirements = root / "docs" / "110_requirements"
@@ -100,6 +134,11 @@ def main(argv: list[str]) -> int:
         for identifier in references(path):
             if identifier.startswith("AC-") and identifier not in criteria:
                 errors.append(f"{path.name} が存在しない {identifier} を指している")
+
+    # 増分の中で、要件とテストが対になっていること
+    for path in sorted(increments.glob("INC-*.md")):
+        errors.extend(paired(path, upper="SPEC", lower="ST"))
+        errors.extend(paired(path, upper="AD", lower="IT"))
 
     # ADR の番号が重複していないこと
     adr_numbers: dict[str, str] = {}
