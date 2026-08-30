@@ -26,6 +26,9 @@ class Comparing:
         worse: list[Shifted] = []
         for before in self._before.outcomes:
             after = self._same(before.case)
+            if not (before.measurable and after.measurable):
+                # 片方でも測れない件は、良し悪しを言えない。
+                continue
             was = before.met(self._before.within)
             now = after.met(self._after.within)
             if was == now:

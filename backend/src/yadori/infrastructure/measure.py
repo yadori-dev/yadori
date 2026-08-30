@@ -59,8 +59,17 @@ class Measure:
             + f"期待したやりとりが上位{measurement.within}件に入った"
         )
         self._say(f"出てはいけないやりとりが出た件: {measurement.intruded}件")
+        if measurement.unmeasurable:
+            self._say(
+                f"測れない件: {measurement.unmeasurable}件"
+                + "（期待するやりとりが直近として渡っている）"
+            )
         for outcome in measurement.outcomes:
-            if not outcome.met(measurement.within):
+            if not outcome.measurable:
+                self._say(
+                    f"  測れず: 「{outcome.case}」直近に入った: {'、'.join(outcome.in_recent)}"
+                )
+            elif not outcome.met(measurement.within):
                 self._say(f"  満たさず: {self._detail(outcome)}")
 
     def _write_difference(

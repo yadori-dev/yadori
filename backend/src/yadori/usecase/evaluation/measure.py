@@ -84,12 +84,19 @@ class Measuring:
             raise CannotMeasure(f"索引を持たないやりとりがある: {len(missing)}件")
 
     def _outcome(self, conversation: Conversation, case: Case) -> Outcome:
-        """一件を測る。探した記憶だけを見る。直近は数えない。"""
-        found = conversation.recall(MEASURED.id, case.utterance).found
+        """一件を測る。探した記憶だけを見る。直近は数えない。
+
+        期待するやりとりが直近として渡っていたら、その件は測れない。満たさ
+        なかった件と混ぜない。
+        """
+        recollected = conversation.recall(MEASURED.id, case.utterance)
+        found = recollected.found
+        passed = {episode.utterance for episode in recollected.recent}
         return Outcome(
             case=case.name,
             expected=tuple(self._ranked(name, found) for name in case.expected),
             forbidden=tuple(self._ranked(name, found) for name in case.forbidden),
+            in_recent=tuple(name for name in case.expected if self._utterance_of(name) in passed),
         )
 
     def _ranked(self, name: str, found: tuple[Found, ...]) -> Ranked:

@@ -136,6 +136,29 @@ class TestMeasuring:
         with pytest.raises(CannotMeasure, match="期待と禁止に指している"):
             _ = self._measuring(broken).at(TIGHT)
 
+    def test_IT_018_003_期待が直近に入った件は満たさずではなく測れずになる(self) -> None:
+        # 直近を広げると tomato が直近へ入り、意味で探す側に現れなくなる。
+        wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
+
+        measured = self._measuring().at(wide)
+
+        drawn = next(one for one in measured.outcomes if one.case == "引ける")
+        assert not drawn.measurable
+        assert drawn.in_recent == ("tomato",)
+        assert not drawn.met(measured.within)
+        # 測れない件は、満たした数の母数からも外れる。
+        assert measured.total == len(CASES) - 1
+        assert measured.unmeasurable == 1
+
+    def test_IT_018_003_測れない件は差に入れない(self) -> None:
+        measuring = self._measuring()
+        wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
+
+        difference = Comparing(measuring.at(LOOSE), measuring.at(wide)).difference()
+
+        named = {shifted.case for shifted in difference.better + difference.worse}
+        assert "引ける" not in named
+
     def test_IT_018_003_索引が欠けると測らない(self) -> None:
         def fresh() -> Memories:
             return _WithoutIndex(InMemoryMemories())  # pyright: ignore[reportReturnType]

@@ -59,16 +59,28 @@ class Ranked:
 @final
 @dataclass(frozen=True)
 class Outcome:
-    """一件を測った結果。"""
+    """一件を測った結果。
+
+    期待するやりとりが直近として渡っていた件は測れない。意味で探す側に現れ
+    ないためである。満たさなかった件と混ぜると、直近の往復数を狭めただけで
+    良くなったように見える。
+    """
 
     case: str
     expected: tuple[Ranked, ...]
     forbidden: tuple[Ranked, ...]
+    in_recent: tuple[str, ...]
+
+    @property
+    def measurable(self) -> bool:
+        return not self.in_recent
 
     def met(self, within: int) -> bool:
         """期待したやりとりがすべて順位に入り、出てはいけないものが出ていない。"""
-        return all(one.within(within) for one in self.expected) and not any(
-            one.rank is not None for one in self.forbidden
+        return (
+            self.measurable
+            and all(one.within(within) for one in self.expected)
+            and not any(one.rank is not None for one in self.forbidden)
         )
 
 
@@ -82,7 +94,11 @@ class Measurement:
 
     @property
     def total(self) -> int:
-        return len(self.outcomes)
+        return sum(1 for outcome in self.outcomes if outcome.measurable)
+
+    @property
+    def unmeasurable(self) -> int:
+        return sum(1 for outcome in self.outcomes if not outcome.measurable)
 
     @property
     def met(self) -> int:
