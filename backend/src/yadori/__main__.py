@@ -2,6 +2,6 @@
 
 import sys
 
-from yadori.infrastructure.start import Startup
+from yadori.infrastructure.entry import Entry
 
-sys.exit(Startup().run())
+sys.exit(Entry(sys.argv).run())
