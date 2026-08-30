@@ -1,0 +1,110 @@
+name: 体験を変える
+description: 新しい機能や改善を、利用する人の体験から決める
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        この Issue だけで「誰が、いつ困り、何をすると、どう変わるか」を読めるようにします。
+        設計の候補、レビュー履歴、工程を守った証拠は書きません。
+        **利用者の実際の会話を書かず、架空の会話に置き換えてください。**
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っていること
+      description: 誰が、どんな状況で、何をしようとして、現在は何が起きますか。解決策ではなく、いま踏んでいる不便を書いてください。
+      placeholder: |
+        毎日話しかける人は、前の日に決めたことを説明し直している。
+        相手は覚えていないため、同じ前提を毎回渡す必要がある。
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: できるようにしたいこと
+      description: 変更後に、できなかった何ができるようになるか、何が変わるかを書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: people
+    attributes:
+      label: 関係する立場と変化
+      description: 行動、判断、見える結果が変わる立場だけを書きます。立場ごとに変更前と変更後を示してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 中心となる利用の流れ
+      description: 最初から最後まで、誰が、どの出ていく先で、何をし、何が見え、次に何を判断できるかを順に書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: conversation
+    attributes:
+      label: 会話の入力と期待する結果
+      description: 会話が変わる場合だけ、架空のやりとりで、話しかけた文章と期待する応対を書いてください。
+      render: text
+
+  - type: textarea
+    id: api
+    attributes:
+      label: API の要求と期待する応答
+      description: API を変える場合だけ、要求、応答状態、応答内容、起きる状態変化を書いてください。
+      render: http
+
+  - type: textarea
+    id: background_process
+    attributes:
+      label: 話しかけられていない間に起きること
+      description: 夢や、宿りから話しかける動きが関わる場合だけ、起動条件と、後から確かめられる記録・状態変化を書いてください。
+
+  - type: textarea
+    id: unused_entrypoints
+    attributes:
+      label: 作らない出ていく先
+      description: 要求から見てありそうでも、今回は作らない出ていく先があれば、見落としではないことを一行で示してください。
+
+  - type: textarea
+    id: memory_quality
+    attributes:
+      label: 思い出す質への影響
+      description: 思い出す条件、記憶の保存の形、埋め込みの作り方に触れる場合、何を測って判断するかを書いてください。触れない場合は「なし」。
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完了と判断できる状態
+      description: 第三者が満たしたかを確認できる形で書いてください。数値や境界が意味を持つ場合は具体的にします。
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: 長く生きる要求とのつながり
+      description: 関係する PB、SC、REQ、AC の番号と名前を書いてください。無ければ「なし」と理由を書きます。
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 今回扱わないこと
+      description: 関連はあるが、この変更には含めないことと、その境界を書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: irreversible
+    attributes:
+      label: 後戻りが高い判断
+      description: 保存形式、記憶の移行、外部との約束、公開APIがあれば書いてください。理由と見直す条件は ADR に分けます。無ければ「なし」。
+    validations:
+      required: true

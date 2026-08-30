@@ -1,0 +1,78 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  branch-rules:
+    name: ブランチ規則
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: ブランチ名とマージ先を確かめる
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          case "$BASE_REF" in
+            main)
+              if ! echo "$HEAD_REF" | grep -qE '^(release|hotfix)/'; then
+                echo "main への PR は release/* または hotfix/* からだけです。" >&2
+                exit 1
+              fi
+              ;;
+            develop)
+              if ! echo "$HEAD_REF" | grep -qE '^(feature/[a-z0-9][a-z0-9/_-]+|release/|hotfix/)'; then
+                echo "develop への PR は feature/* release/* hotfix/* からだけです。" >&2
+                exit 1
+              fi
+              ;;
+          esac
+
+      - name: PR タイトルが Conventional Commits に従うことを確かめる
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          if ! echo "$TITLE" | grep -qE '^(feat|fix|docs|chore|refactor|test|ci|build|perf)(\([a-z0-9._-]+\))?!?: .+'; then
+            echo "PR タイトルは Conventional Commits に従ってください。" >&2
+            echo "  例: feat(memory): 会話を出来事として保存する" >&2
+            exit 1
+          fi
+
+  check:
+    name: 検査
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 認証情報の検査
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --all-extras
+
+      - name: 識別子の対応
+        run: uv run python scripts/check_trace.py
+
+      - name: 層の依存の向き
+        run: uv run python scripts/check_deps.py
+
+      - name: 書式と型
+        run: |
+          uv run ruff format --check backend
+          uv run ruff check backend
+          uv run mypy backend/src
+
+      - name: テスト
+        run: uv run pytest backend/tests -m "not contract"

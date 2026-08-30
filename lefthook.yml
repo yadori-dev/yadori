@@ -1,0 +1,43 @@
+# 判断を要しない検査だけを自動で実行する。
+
+pre-commit:
+  parallel: true
+  commands:
+    gitleaks:
+      run: gitleaks git --staged --no-banner --redact
+      fail_text: |
+        認証情報の可能性がある文字列が検出されました。
+        CONTRIBUTING.md の「認証情報が混ざったとき」を参照してください。
+
+    confidential:
+      run: bash scripts/check-confidential.sh
+
+    trace:
+      glob: "{docs/**,backend/**/*.py}"
+      run: uv run python scripts/check_trace.py
+
+    deps:
+      glob: "backend/**/*.py"
+      run: uv run python scripts/check_deps.py
+
+commit-msg:
+  commands:
+    ai-footer:
+      run: bash scripts/check-commit-msg.sh {1}
+
+pre-push:
+  commands:
+    secrets:
+      run: just check-secrets
+      fail_text: |
+        履歴に認証情報の可能性がある文字列があります。pushすると取り返しがつきません。
+
+    all:
+      glob:
+        - "backend/**"
+        - "docs/**"
+        - "scripts/**"
+        - "*.md"
+        - "justfile"
+        - "lefthook.yml"
+      run: just lint test check-trace check-deps stats

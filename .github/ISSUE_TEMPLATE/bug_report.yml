@@ -1,0 +1,47 @@
+name: 直したいことがある
+description: 期待した振る舞いと違うことが起きている
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **利用者の実際の会話を書かず、架空の会話で再現手順を書いてください。**
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待していたこと
+      validations:
+        required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際に起きたこと
+      description: 観測した出力、応答、記録を書いてください。推測と観測を混ぜないでください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 架空の会話で、最初から最後まで書いてください。
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 元の要求を満たしていなかったのか、後から壊れたのか
+      description: 一度も満たしていなかった場合は元の増分を開き直します。満たした後に壊れた場合は修正用の増分を作ります。分からない場合は分からないと書いてください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: 関係する要求
+      description: 関係する PB、REQ、AC、ADR があれば書いてください。

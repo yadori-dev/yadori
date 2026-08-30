@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+/dist/
+/build/
+
+# ローカルデータ（宿りの記憶。リポジトリへ入れない）
+*.sqlite
+*.sqlite-journal
+*.db
+/data/
+/memory/
+
+# 認証情報
+.env
+.env.local
+.env.*.local
+/secrets/
+
+# 機密の禁止語リスト。リスト自体が漏洩になるためコミットしない
+.confidential-denylist
+
+# AIコーディング支援ツールの個人設定。スキルと共有設定はコミットする
+.claude/settings.local.json
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
