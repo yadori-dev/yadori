@@ -64,6 +64,19 @@ class Found:
 
 
 @dataclass(frozen=True)
+class HowToRecall:
+    """思い出し方の値。
+
+    初期値であり、根拠のある値ではない。`AC-002` と `AC-006` を選ぶ増分で
+    測って直す。
+    """
+
+    recent_turns: int = 6
+    found_limit: int = 5
+    relevance_floor: float = 0.3
+
+
+@dataclass(frozen=True)
 class Recollection:
     """思い出したこと。
 
