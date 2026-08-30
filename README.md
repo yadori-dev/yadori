@@ -12,12 +12,12 @@
 `~/.yadori/` に、その宿りが誰であるかを置きます。
 
 ```console
-$ cat ~/.yadori/宿り.toml
+$ cat ~/.yadori/dweller.toml
 name = "そら"
 nickname = "そら"
 owner = "あなたの名前"
 
-$ cat ~/.yadori/名乗り.md
+$ cat ~/.yadori/identity.md
 わたしはそらです。ていねいな言葉で話し、園芸を好みます。
 
 $ ANTHROPIC_API_KEY=... uv run python -m yadori

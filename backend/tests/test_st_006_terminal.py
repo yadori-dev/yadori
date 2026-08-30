@@ -24,11 +24,11 @@ NAME_DECLARED = "わたしはそらです。ていねいな言葉で話し、園
 
 
 def _home(tmp_path: Path, *, declared: str = NAME_DECLARED) -> Path:
-    _ = (tmp_path / "宿り.toml").write_text(
+    _ = (tmp_path / "dweller.toml").write_text(
         'id = "sora"\nname = "そら"\nnickname = "そら"\nowner = "架空の持ち主"\n',
         encoding="utf-8",
     )
-    _ = (tmp_path / "名乗り.md").write_text(declared, encoding="utf-8")
+    _ = (tmp_path / "identity.md").write_text(declared, encoding="utf-8")
     return tmp_path
 
 
@@ -79,7 +79,7 @@ def test_名乗りを書き直すと新しい版になり以前の版も残る(t
     home = _home(tmp_path)
     _run(home, "\n", _Echoing())[1].close()
 
-    _ = (home / "名乗り.md").write_text("わたしはそらです。短く話します。", encoding="utf-8")
+    _ = (home / "identity.md").write_text("わたしはそらです。短く話します。", encoding="utf-8")
     _, memories = _run(home, "\n", _Echoing())
 
     current = memories.current_identity("sora")

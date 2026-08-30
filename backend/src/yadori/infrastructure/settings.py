@@ -14,8 +14,10 @@ from typing import final
 from yadori.domain.memory import Dweller
 
 DEFAULT_HOME = Path.home() / ".yadori"
-WHO = "宿り.toml"
-NAME_DECLARED = "名乗り.md"
+# 機械が名前で探し、利用者が端末で打つファイルは ASCII にする。
+# 名前は用語集のコード名に合わせる。
+WHO = "dweller.toml"
+NAME_DECLARED = "identity.md"
 
 
 class NotSettled(Exception):
@@ -31,7 +33,7 @@ class Settings:
 
     @property
     def memories_path(self) -> Path:
-        return self.home / "記憶.sqlite"
+        return self.home / "memories.sqlite"
 
 
 @final
