@@ -8,7 +8,7 @@ setup:
     lefthook install
 
 # 現在のコードと文書に対する検査。
-check: check-secrets check-trace check-deps lint test stats
+check: check-secrets check-trace check-deps check-classes lint test stats
 
 check-secrets:
     @echo "── 認証情報の検査（履歴全体） ──"
@@ -26,11 +26,15 @@ check-deps:
     @echo "── 層の依存の向きの検査 ──"
     uv run python scripts/check_deps.py
 
+check-classes:
+    @echo "── 責務がクラスに閉じているか ──"
+    uv run python scripts/check_classes.py
+
 lint:
     @echo "── 書式と型 ──"
     uv run ruff format --check backend
     uv run ruff check backend
-    uv run mypy backend/src
+    uv run basedpyright
 
 test:
     @echo "── テスト ──"

@@ -75,11 +75,14 @@ jobs:
       - name: 層の依存の向き
         run: uv run python scripts/check_deps.py
 
+      - name: 責務の閉じ方
+        run: uv run python scripts/check_classes.py
+
       - name: 書式と型
         run: |
           uv run ruff format --check backend
           uv run ruff check backend
-          uv run mypy backend/src
+          uv run basedpyright
 
       - name: テスト
         run: uv run pytest backend/tests -m "not contract"

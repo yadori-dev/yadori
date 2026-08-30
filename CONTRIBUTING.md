@@ -52,7 +52,9 @@ pushする前に気づいた場合は、コミットを作り直してから pus
 
 ## 開発環境
 
-必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。
+必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。型検査は [basedpyright](https://docs.basedpyright.com/) を最も厳しい設定で使い、警告も失敗として扱います。設定は `pyproject.toml` の `[tool.basedpyright]` が正典で、仮想環境の置き場もそこに書いてあります。編集環境も同じ設定と同じ仮想環境を見てください。Zed 用の設定は `.zed/settings.json` にあります。
+
+手元と検査で違う設定を使うと、片方だけが通る状態が続きます。とくに仮想環境を見つけられない編集環境では、外部のパッケージが解決できず、身に覚えのない指摘が大量に出ます。
 
 ```console
 $ just setup     # 依存の取得とGitフックの導入
@@ -76,11 +78,14 @@ infrastructure → adapter → usecase → domain
 
 - 業務の言葉で命名する。使う言葉は [`docs/150_system/用語集.md`](docs/150_system/用語集.md) が正典で、無い概念へ勝手に名前を付けない
 - ロジックはそのデータと同じ場所に置く。データを取り出して外で処理しない
+- **機械が名前で探すファイルと、利用者が端末で打つファイルは ASCII で名付ける。** 保存先、設定ファイル、実行するものが該当する。macOS は濁点を分解して保存し、Linux はしないため、同じに見えて一致しない名前が生まれる。名前は[用語集](docs/150_system/用語集.md)のコード名に合わせる。人が読むだけの文書のファイル名は日本語でよい
+- **責務はクラスへ閉じる。モジュールの直下に関数を置かない。** 名前の付いた関数が並ぶだけのモジュールは、どれが入口でどれが下請けかを読めない。`just check-classes` が検査する。テストは pytest の作法に従い、モジュール直下の関数で書いてよい
+- **入口は、上から読めば何をする手順かが並ぶように書く。** 各段を名前の付いたメソッドへ分け、同じ段には同じ粒度だけを置く。詳しさは一段ずつ下げ、その段でも二つ以上のことをするなら、さらに名前を付けて分ける。段の名前は業務の言葉で付ける（[用語集](docs/150_system/用語集.md)）
 - 不正な状態を表現できなくする。不正な入力と状態は早期に失敗させる
 - エラーハンドリングは境界（利用者の入力、外部API）にだけ置く。内部の例外は伝播させる
 - 投機的な抽象化、将来用の汎化、使わない引数を書かない
 - コメントは「なぜそうするか」だけ書く。「何をするか」はコードが語る
-- 型を明示する。`Any` と型の言い換えは設計の敗北
+- 型を明示する。`Any` と型の言い換えは設計の敗北。型検査は `basedpyright` で行い、`just lint` と手元の編集環境で同じ結果になるようにする
 - 重複は、間違った共通化で縛るよりましなことがある。共通化の前に「これは機能を縛らないか」を問う
 
 ### テスト
