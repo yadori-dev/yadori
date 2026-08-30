@@ -51,10 +51,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      # gitleaks/gitleaks-action は組織のリポジトリで有料の鍵を要求する。
+      # gitleaks 本体は無料で使えるため、実行ファイルを直接取得して走らせる。
       - name: 認証情報の検査
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact
 
       - uses: astral-sh/setup-uv@v5
         with:
