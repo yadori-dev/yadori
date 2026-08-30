@@ -75,7 +75,7 @@ class Conversation:
 
         原文は読むだけで変えない。
         """
-        missing = self._memories.episodes_without_index(dweller_id)
+        missing = self._memories.episodes_without_index(dweller_id, self._embeddings.name)
         for episode in missing:
             self._build_index(episode)
         return len(missing)
@@ -108,6 +108,7 @@ class Conversation:
         """
         hits = self._memories.search(
             dweller_id,
+            self._embeddings.name,
             self._embeddings.of(utterance),
             self._how.found_limit,
             self._how.relevance_floor,

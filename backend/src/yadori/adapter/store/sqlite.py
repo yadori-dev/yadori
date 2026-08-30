@@ -37,9 +37,10 @@ CREATE TABLE IF NOT EXISTS episode (
     happened_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS episode_index (
-    episode_id INTEGER PRIMARY KEY REFERENCES episode(id),
+    episode_id INTEGER NOT NULL REFERENCES episode(id),
     model TEXT NOT NULL,
-    vector TEXT NOT NULL
+    vector TEXT NOT NULL,
+    PRIMARY KEY (episode_id, model)
 );
 CREATE TABLE IF NOT EXISTS retrieval (
     episode_id INTEGER NOT NULL REFERENCES episode(id),
@@ -143,16 +144,19 @@ class SqliteMemories:
     def search(
         self,
         dweller_id: str,
+        model: str,
         vector: Vector,
         limit: int,
         floor: float,
         exclude: Collection[int],
     ) -> tuple[tuple[Episode, float], ...]:
+        # 違う模型で作った索引は使わない。長さが違えば比べようとして落ち、
+        # 長さが同じなら誤った近さを黙って出す。
         rows = self._all(
             "SELECT e.*, i.vector AS vector FROM episode e"
             + " JOIN episode_index i ON i.episode_id = e.id"
-            + " WHERE e.dweller_id = ?",
-            (dweller_id,),
+            + " WHERE e.dweller_id = ? AND i.model = ?",
+            (dweller_id, model),
         )
         excluded = set(exclude)
         scored = [
@@ -202,12 +206,13 @@ class SqliteMemories:
             (dweller_id,),
         )
 
-    def episodes_without_index(self, dweller_id: str) -> tuple[Episode, ...]:
+    def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]:
+        """いまの模型の索引を持たない記憶。無視する側と同じ規則で決める。"""
         rows = self._all(
             "SELECT e.* FROM episode e"
-            + " LEFT JOIN episode_index i ON i.episode_id = e.id"
+            + " LEFT JOIN episode_index i ON i.episode_id = e.id AND i.model = ?"
             + " WHERE e.dweller_id = ? AND i.episode_id IS NULL ORDER BY e.id",
-            (dweller_id,),
+            (model, dweller_id),
         )
         return tuple(self._as_episode(row) for row in rows)
 

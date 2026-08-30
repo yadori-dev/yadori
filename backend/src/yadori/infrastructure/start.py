@@ -66,7 +66,7 @@ class Startup:
     def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは文字の並びから作る実装を使う。応対の文章は、持ち主の定額
+        埋め込みは語の重なりを見る実装を使う。応対の文章は、持ち主の定額
         契約で動く対話する道具が作る。
         """
         conversation = Conversation(memories, CharacterPairs(), self._now)

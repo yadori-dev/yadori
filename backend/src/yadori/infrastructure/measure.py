@@ -13,7 +13,7 @@ from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.evaluation import EvalFile
 from yadori.adapter.store import InMemoryMemories
 from yadori.domain.evaluation import CannotMeasure, Difference, Measurement, Outcome
-from yadori.domain.memory import HowToRecall
+from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall
 from yadori.usecase.evaluation import Comparing, Measuring
 
 DEFAULT_EVAL = Path("evals/recall.toml")
@@ -27,10 +27,12 @@ class Measure:
         self,
         eval_path: Path | None = None,
         changed: HowToRecall | None = None,
+        embeddings: Embeddings | None = None,
         writing: TextIO | None = None,
     ) -> None:
         self._eval_path: Path = eval_path or DEFAULT_EVAL
         self._changed: HowToRecall | None = changed
+        self._embeddings: Embeddings = embeddings or CharacterPairs()
         self._writing: TextIO = writing or sys.stdout
 
     def run(self) -> int:
@@ -42,18 +44,19 @@ class Measure:
         """
         try:
             recall_eval = EvalFile(self._eval_path).read()
-            measuring = Measuring(recall_eval, InMemoryMemories, CharacterPairs())
+            measuring = Measuring(recall_eval, InMemoryMemories, self._embeddings)
             now = measuring.at(HowToRecall())
             self._write(now)
             if self._changed is not None:
                 self._write_difference(measuring, now, self._changed)
-        except CannotMeasure as reason:
+        except (CannotMeasure, EmbeddingsUnavailable) as reason:
             print(f"測れません: {reason}", file=sys.stderr)
             return 1
         return 0
 
     def _write(self, measurement: Measurement) -> None:
         """要約と、満たさなかった件を書く。要約は件ごとの結果から求める。"""
+        self._say(f"埋め込み: {self._embeddings.name}")
         self._say(
             f"{measurement.total}件中 {measurement.met}件で"
             + f"期待したやりとりが上位{measurement.within}件に入った"

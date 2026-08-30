@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 from typing import final
 
-from yadori.domain.memory import HowToRecall
+from yadori.adapter.embedding import CharacterPairs, Multilingual
+from yadori.domain.memory import Embeddings, HowToRecall
 from yadori.infrastructure.measure import Measure
 from yadori.infrastructure.start import Startup
 
@@ -17,7 +18,8 @@ USAGE = (
     "使い方:\n"
     + "  python -m yadori                    宿りを起こして話す\n"
     + "  python -m yadori measure            今の条件で測る\n"
-    + "  python -m yadori measure [--eval PATH] [--floor N] [--recent N] [--limit N]\n"
+    + "  python -m yadori measure [--eval PATH] [--embedding NAME]\n"
+    + "                          [--floor N] [--recent N] [--limit N]\n"
     + "                                      条件を変えて測り、件ごとの差を出す\n"
     + "\n"
     + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
@@ -51,13 +53,30 @@ class Entry:
             return 1
         given = dict(zip(rest[::2], rest[1::2], strict=True))
         eval_path = self._eval_path(given)
+        embeddings = self._embeddings(given)
+        if embeddings is None:
+            print(USAGE, file=sys.stderr)
+            return 1
         if not given:
-            return Measure(eval_path=eval_path).run()
+            return Measure(eval_path=eval_path, embeddings=embeddings).run()
         changed = self._changed(given)
         if changed is None:
             print(USAGE, file=sys.stderr)
             return 1
-        return Measure(eval_path=eval_path, changed=changed).run()
+        return Measure(eval_path=eval_path, changed=changed, embeddings=embeddings).run()
+
+    def _embeddings(self, given: dict[str, str]) -> Embeddings | None:
+        """どの埋め込みで測るか。省けば既定のものを使う。"""
+        chosen = given.pop("--embedding", None)
+        if chosen is None:
+            return CharacterPairs()
+        if chosen == "characters":
+            return CharacterPairs()
+        if chosen == "multilingual":
+            return Multilingual()
+        if "/" in chosen:
+            return Multilingual(chosen)
+        return None
 
     def _eval_path(self, given: dict[str, str]) -> Path | None:
         """どの評価セットを測るか。省けばリポジトリの架空のものを測る。"""

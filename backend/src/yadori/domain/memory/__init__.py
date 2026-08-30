@@ -14,11 +14,17 @@ from yadori.domain.memory.model import (
     Retrieval,
     Vector,
 )
-from yadori.domain.memory.ports import Embeddings, Memories, NameNotDeclared
+from yadori.domain.memory.ports import (
+    Embeddings,
+    EmbeddingsUnavailable,
+    Memories,
+    NameNotDeclared,
+)
 
 __all__ = [
     "Dweller",
     "Embeddings",
+    "EmbeddingsUnavailable",
     "Episode",
     "Found",
     "HowToRecall",

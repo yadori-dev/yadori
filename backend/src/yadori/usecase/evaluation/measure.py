@@ -79,7 +79,7 @@ class Measuring:
 
     def _check_indexed(self, kept: Memories) -> None:
         """索引を持たないやりとりが無いことを確かめる。"""
-        missing = kept.episodes_without_index(MEASURED.id)
+        missing = kept.episodes_without_index(MEASURED.id, self._embeddings.name)
         if missing:
             raise CannotMeasure(f"索引を持たないやりとりがある: {len(missing)}件")
 

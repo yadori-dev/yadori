@@ -49,9 +49,13 @@ class CharacterPairs:
 class Closeness:
     """二つの並びがどれくらい近いか。
 
-    どちらも長さ1のため内積でよい。埋め込みの作り方を変えるときは、測り方も
-    ここで見直す。
+    長さで割ってから比べる。長さ1で返す埋め込みを前提にすると、そうでない
+    実装へ替えたときに一を超える値が出て、下限がどこでも効かなくなる。前提を
+    置かないほうが、埋め込みを差し替えられるという設計に合う。
     """
 
     def between(self, left: Vector, right: Vector) -> float:
-        return sum(a * b for a, b in zip(left, right, strict=True))
+        lengths = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))
+        if lengths == 0:
+            return 0.0
+        return sum(a * b for a, b in zip(left, right, strict=True)) / lengths

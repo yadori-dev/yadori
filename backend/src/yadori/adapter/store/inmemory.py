@@ -20,7 +20,7 @@ class _Kept:
     dwellers: dict[str, Dweller] = field(default_factory=dict)
     identities: dict[str, list[Identity]] = field(default_factory=dict)
     episodes: dict[int, tuple[str, Episode]] = field(default_factory=dict)
-    index: dict[int, tuple[str, Vector]] = field(default_factory=dict)
+    index: dict[tuple[int, str], Vector] = field(default_factory=dict)
     retrievals: list[tuple[int, datetime]] = field(default_factory=list)
     next_id: int = 1
 
@@ -63,6 +63,7 @@ class InMemoryMemories:
     def search(
         self,
         dweller_id: str,
+        model: str,
         vector: Vector,
         limit: int,
         floor: float,
@@ -70,9 +71,9 @@ class InMemoryMemories:
     ) -> tuple[tuple[Episode, float], ...]:
         excluded = set(exclude)
         scored = [
-            (episode, self._closeness.between(vector, self._kept.index[episode.id][1]))
+            (episode, self._closeness.between(vector, self._kept.index[(episode.id, model)]))
             for episode in self._owned(dweller_id)
-            if episode.id not in excluded and episode.id in self._kept.index
+            if episode.id not in excluded and (episode.id, model) in self._kept.index
         ]
         scored = [pair for pair in scored if pair[1] >= floor]
         scored.sort(key=lambda pair: (-pair[1], -pair[0].id))
@@ -101,17 +102,19 @@ class InMemoryMemories:
         return len(self._owned(dweller_id))
 
     def write_index(self, episode_id: int, model: str, vector: Vector) -> None:
-        self._kept.index[episode_id] = (model, vector)
+        self._kept.index[(episode_id, model)] = vector
 
     def clear_index(self, dweller_id: str) -> None:
-        for episode in self._owned(dweller_id):
-            _ = self._kept.index.pop(episode.id, None)
+        owned = {episode.id for episode in self._owned(dweller_id)}
+        for key in [key for key in self._kept.index if key[0] in owned]:
+            _ = self._kept.index.pop(key, None)
 
-    def episodes_without_index(self, dweller_id: str) -> tuple[Episode, ...]:
+    def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]:
+        """いまの模型の索引を持たない記憶。無視する側と同じ規則で決める。"""
         return tuple(
             episode
             for episode in sorted(self._owned(dweller_id), key=lambda one: one.id)
-            if episode.id not in self._kept.index
+            if (episode.id, model) not in self._kept.index
         )
 
     def record_retrieval(self, episode_ids: Collection[int], at: datetime) -> None:
