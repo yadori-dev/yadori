@@ -11,16 +11,18 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
+from typing import final
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 
 
+@final
 class ModuleFunctions:
     """モジュールの直下に置かれた関数を見つける。"""
 
     def __init__(self, root: Path) -> None:
-        self._root = root
-        self._package = root / "backend" / "src"
+        self._root: Path = root
+        self._package: Path = root / "backend" / "src"
 
     def offences(self) -> list[str]:
         found: list[str] = []
@@ -38,9 +40,10 @@ class ModuleFunctions:
         ]
 
 
+@final
 class Check:
     def __init__(self, argv: list[str]) -> None:
-        self._root = Path(argv[1]).resolve() if len(argv) > 1 else DEFAULT_ROOT
+        self._root: Path = Path(argv[1]).resolve() if len(argv) > 1 else DEFAULT_ROOT
 
     def run(self) -> int:
         offences = ModuleFunctions(self._root).offences()

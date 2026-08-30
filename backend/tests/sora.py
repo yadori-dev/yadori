@@ -58,4 +58,4 @@ class Ticking:
 
 def talk(conversation: Conversation, utterances: Collection[str]) -> None:
     for utterance in utterances:
-        conversation.remember(SORA.id, utterance, "はい、わかりました")
+        _ = conversation.remember(SORA.id, utterance, "はい、わかりました")

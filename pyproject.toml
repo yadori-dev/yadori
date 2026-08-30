@@ -33,18 +33,16 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.basedpyright]
 pythonVersion = "3.12"
-typeCheckingMode = "recommended"
-include = ["backend"]
+# 最も厳しい設定を使う。編集環境がこれで動くため、緩めると手元と検査が
+# 食い違い、片方だけが通る状態に戻る。
+typeCheckingMode = "all"
+include = ["backend", "scripts"]
 extraPaths = ["backend/src", "backend"]
+# 編集環境が同じ環境を見るように、置き場をここに書く。書かないと外部の
+# パッケージを解決できず、身に覚えのない指摘が大量に出る。
+venvPath = "."
+venv = ".venv"
 failOnWarnings = true
-
-# テストは pytest の作法に従う。呼び出しの結果を使わないこと、置き換えた実装が
-# 引数を使わないこと、テスト対象の内側を覗くことは、テストでは普通である。
-[[tool.basedpyright.executionEnvironments]]
-root = "backend/tests"
-reportUnusedCallResult = "none"
-reportUnusedParameter = "none"
-reportPrivateUsage = "none"
 
 [tool.pytest.ini_options]
 pythonpath = ["backend/src", "backend"]

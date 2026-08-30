@@ -26,6 +26,7 @@ class _Counting:
     """
 
     def speak(self, recollection: Recollection, utterance: str) -> str:
+        del utterance
         return (
             f"名乗り{recollection.identity.version}版"
             f"／直近{len(recollection.recent)}件"
@@ -37,6 +38,7 @@ class _Silent:
     """応対を作れない声。"""
 
     def speak(self, recollection: Recollection, utterance: str) -> str:
+        del recollection, utterance
         raise CannotSpeak("模型が応えない")
 
 
@@ -44,7 +46,7 @@ class _Silent:
 def memories(tmp_path: Path) -> Iterator[SqliteMemories]:
     kept = SqliteMemories(tmp_path / "test.sqlite")
     kept.settle(SORA)
-    kept.write_identity(SORA.id, NAME_DECLARED)
+    _ = kept.write_identity(SORA.id, NAME_DECLARED)
     yield kept
     kept.close()
 
@@ -78,7 +80,7 @@ def test_IT_006_004_応対を作れないと覚えないが思い出した記録
 
     silent = Turn(conversation_of(memories), _Silent())
     with pytest.raises(CannotSpeak):
-        silent.respond_to(SORA.id, ABOUT_TOMATO)
+        _ = silent.respond_to(SORA.id, ABOUT_TOMATO)
 
     assert memories.count_episodes(SORA.id) == kept
     # 思い出したこと自体は起きているため、記録は残る。

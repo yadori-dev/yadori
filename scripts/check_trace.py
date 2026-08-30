@@ -189,8 +189,8 @@ def main(argv: list[str]) -> int:
     increment_count = len(list(increments.glob("INC-*.md")))
     print(
         "識別子の対応: 問題なし "
-        f"(PB {len(problems)} / SC {len(scenarios)} / REQ {len(demands)} "
-        f"/ AC {len(criteria)} / ADR {len(adr_numbers)} / INC {increment_count})"
+        + f"(PB {len(problems)} / SC {len(scenarios)} / REQ {len(demands)} "
+        + f"/ AC {len(criteria)} / ADR {len(adr_numbers)} / INC {increment_count})"
     )
     return 0
 

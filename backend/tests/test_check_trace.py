@@ -59,7 +59,7 @@ def build(root: Path, **overrides: str) -> None:
     directory = root / "docs" / "110_requirements"
     directory.mkdir(parents=True, exist_ok=True)
     for name, body in documents.items():
-        (directory / name).write_text(body, encoding="utf-8")
+        _ = (directory / name).write_text(body, encoding="utf-8")
     (root / "docs" / "010_decisions").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "210_increments").mkdir(parents=True, exist_ok=True)
 
@@ -120,8 +120,8 @@ def test_扱う要求の無い課題は落ちる(tmp_path: Path) -> None:
 def test_ADR_の番号が重複していると落ちる(tmp_path: Path) -> None:
     build(tmp_path)
     decisions = tmp_path / "docs" / "010_decisions"
-    (decisions / "ADR-001-片方.md").write_text("# ADR-001", encoding="utf-8")
-    (decisions / "ADR-001-もう片方.md").write_text("# ADR-001", encoding="utf-8")
+    _ = (decisions / "ADR-001-片方.md").write_text("# ADR-001", encoding="utf-8")
+    _ = (decisions / "ADR-001-もう片方.md").write_text("# ADR-001", encoding="utf-8")
 
     result = run(tmp_path)
 
@@ -143,7 +143,7 @@ INCREMENT = """# INC-006 例
 
 def build_increment(root: Path, body: str, name: str = "INC-006.md") -> None:
     build(root)
-    (root / "docs" / "210_increments" / name).write_text(body, encoding="utf-8")
+    _ = (root / "docs" / "210_increments" / name).write_text(body, encoding="utf-8")
 
 
 def test_要件とテストが対なら通る(tmp_path: Path) -> None:

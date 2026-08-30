@@ -43,6 +43,7 @@ class _FailingWrite:
         return getattr(self._inner, name)  # pyright: ignore[reportAny]
 
     def write_episode(self, *args: object, **kwargs: object) -> Episode:
+        del args, kwargs
         raise OSError("保存先を読み書きできない")
 
 
@@ -57,6 +58,7 @@ class _FailingIndex:
         return getattr(self._inner, name)  # pyright: ignore[reportAny]
 
     def write_index(self, *args: object, **kwargs: object) -> None:
+        del args, kwargs
         raise OSError("索引を書けない")
 
 
@@ -86,7 +88,7 @@ def sqlite_memories(tmp_path: Path) -> Iterator[SqliteMemories]:
 def settle(memories: SqliteMemories | InMemoryMemories, *, declare_name: bool = True) -> None:
     memories.settle(SORA)
     if declare_name:
-        memories.write_identity(SORA.id, NAME_DECLARED)
+        _ = memories.write_identity(SORA.id, NAME_DECLARED)
 
 
 def make(memories: Memories, embeddings: object | None = None) -> Conversation:
@@ -229,7 +231,7 @@ def test_IT_006_003_覚える途中で失敗すると何も増えない(
 
     failing: Memories = _FailingWrite(sqlite_memories)  # pyright: ignore[reportAssignmentType]
     with pytest.raises(OSError):
-        make(failing).remember(SORA.id, "覚えられない発話", "返事")
+        _ = make(failing).remember(SORA.id, "覚えられない発話", "返事")
 
     assert sqlite_memories.count_episodes(SORA.id) == kept
     assert sqlite_memories.retrieval(1).count == 0
@@ -244,7 +246,7 @@ def test_IT_006_003_索引を書けなくても原文は残り後から作り直
     settle(sqlite_memories)
     failing: Memories = _FailingIndex(sqlite_memories)  # pyright: ignore[reportAssignmentType]
     with pytest.raises(OSError):
-        make(failing).remember(SORA.id, PLANTED, "いいですね")
+        _ = make(failing).remember(SORA.id, PLANTED, "いいですね")
     # 直近から押し出さないと、意味で探す側に現れない。
     talk(make(sqlite_memories), FILLERS)
 
@@ -260,8 +262,8 @@ def test_IT_006_003_名乗りが無ければ書く前に断る(sqlite_memories: 
     conversation = make(sqlite_memories)
 
     with pytest.raises(NameNotDeclared):
-        conversation.recall(SORA.id, "はじめまして")
+        _ = conversation.recall(SORA.id, "はじめまして")
     with pytest.raises(NameNotDeclared):
-        conversation.remember(SORA.id, "はじめまして", "返事")
+        _ = conversation.remember(SORA.id, "はじめまして", "返事")
 
     assert sqlite_memories.count_episodes(SORA.id) == 0

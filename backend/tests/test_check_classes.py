@@ -16,7 +16,7 @@ class TestCheckClasses:
     def _build(self, root: Path, body: str) -> None:
         path = root / "backend" / "src" / "yadori" / "example.py"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _ = path.write_text(body, encoding="utf-8")
 
     def _run(self, root: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(

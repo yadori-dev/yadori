@@ -42,7 +42,7 @@ class Startup:
 
         memories = SqliteMemories(settings.memories_path)
         try:
-            self._settle(memories, settings)
+            self.settle(memories, settings)
             Terminal(self._assemble(memories), settings.dweller).listen()
         finally:
             memories.close()
@@ -53,7 +53,7 @@ class Startup:
         print(missing, file=sys.stderr)
         return 1
 
-    def _settle(self, memories: SqliteMemories, settings: Settings) -> None:
+    def settle(self, memories: SqliteMemories, settings: Settings) -> None:
         """宿りを住まわせ、手元の名乗りを現在の版にする。
 
         名乗りの文章が変わっていれば新しい版を足す。以前の版は消さない。

@@ -24,11 +24,11 @@ NAME_DECLARED = "わたしはそらです。ていねいな言葉で話し、園
 
 
 def _home(tmp_path: Path, *, declared: str = NAME_DECLARED) -> Path:
-    (tmp_path / "宿り.toml").write_text(
+    _ = (tmp_path / "宿り.toml").write_text(
         'id = "sora"\nname = "そら"\nnickname = "そら"\nowner = "架空の持ち主"\n',
         encoding="utf-8",
     )
-    (tmp_path / "名乗り.md").write_text(declared, encoding="utf-8")
+    _ = (tmp_path / "名乗り.md").write_text(declared, encoding="utf-8")
     return tmp_path
 
 
@@ -39,13 +39,14 @@ class _Echoing:
 
 class _Silent:
     def speak(self, recollection: Recollection, utterance: str) -> str:
+        del recollection, utterance
         raise CannotSpeak("模型が応えない")
 
 
 def _run(home: Path, spoken: str, voice: object) -> tuple[str, SqliteMemories]:
     settings = SettingsFile(home).read()
     memories = SqliteMemories(settings.memories_path)
-    Startup(home)._settle(memories, settings)
+    Startup(home).settle(memories, settings)
     conversation = Conversation(memories, CharacterPairs(), Ticking())
     written = io.StringIO()
     Terminal(
@@ -78,7 +79,7 @@ def test_名乗りを書き直すと新しい版になり以前の版も残る(t
     home = _home(tmp_path)
     _run(home, "\n", _Echoing())[1].close()
 
-    (home / "名乗り.md").write_text("わたしはそらです。短く話します。", encoding="utf-8")
+    _ = (home / "名乗り.md").write_text("わたしはそらです。短く話します。", encoding="utf-8")
     _, memories = _run(home, "\n", _Echoing())
 
     current = memories.current_identity("sora")

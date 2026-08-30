@@ -52,7 +52,9 @@ pushする前に気づいた場合は、コミットを作り直してから pus
 
 ## 開発環境
 
-必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。型検査は [basedpyright](https://docs.basedpyright.com/) を使い、警告も失敗として扱います。編集環境も同じ検査を使ってください。手元と CI で違う検査を使うと、片方だけが通る状態が続きます。
+必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。型検査は [basedpyright](https://docs.basedpyright.com/) を最も厳しい設定で使い、警告も失敗として扱います。設定は `pyproject.toml` の `[tool.basedpyright]` が正典で、仮想環境の置き場もそこに書いてあります。編集環境も同じ設定と同じ仮想環境を見てください。Zed 用の設定は `.zed/settings.json` にあります。
+
+手元と検査で違う設定を使うと、片方だけが通る状態が続きます。とくに仮想環境を見つけられない編集環境では、外部のパッケージが解決できず、身に覚えのない指摘が大量に出ます。
 
 ```console
 $ just setup     # 依存の取得とGitフックの導入
