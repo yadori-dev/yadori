@@ -18,15 +18,6 @@ from yadori.domain.memory import Vector
 _DIMENSIONS = 512
 
 
-def _bucket(pair: str) -> int:
-    """文字の組を桁へ割り当てる。
-
-    組み込みの `hash` はプロセスごとに値が変わるため使わない。保存した索引を
-    次の起動で読めなくなり、原文から作り直せるという前提が崩れる。
-    """
-    return zlib.crc32(pair.encode("utf-8")) % _DIMENSIONS
-
-
 class CharacterPairs:
     @property
     def name(self) -> str:
@@ -36,14 +27,28 @@ class CharacterPairs:
         counts: Counter[int] = Counter()
         stripped = "".join(text.split())
         for index in range(max(len(stripped) - 1, 0)):
-            counts[_bucket(stripped[index : index + 2])] += 1
+            counts[self._bucket(stripped[index : index + 2])] += 1
         if not counts:
             return tuple(0.0 for _ in range(_DIMENSIONS))
 
         length = math.sqrt(sum(count * count for count in counts.values()))
         return tuple(counts.get(index, 0) / length for index in range(_DIMENSIONS))
 
+    def _bucket(self, pair: str) -> int:
+        """文字の組を桁へ割り当てる。
 
-def closeness(left: Vector, right: Vector) -> float:
-    """二つの並びがどれくらい近いか。どちらも長さ1のため内積でよい。"""
-    return sum(a * b for a, b in zip(left, right, strict=True))
+        組み込みの `hash` はプロセスごとに値が変わるため使わない。保存した
+        索引を次の起動で読めなくなり、原文から作り直せるという前提が崩れる。
+        """
+        return zlib.crc32(pair.encode("utf-8")) % _DIMENSIONS
+
+
+class Closeness:
+    """二つの並びがどれくらい近いか。
+
+    どちらも長さ1のため内積でよい。埋め込みの作り方を変えるときは、測り方も
+    ここで見直す。
+    """
+
+    def between(self, left: Vector, right: Vector) -> float:
+        return sum(a * b for a, b in zip(left, right, strict=True))

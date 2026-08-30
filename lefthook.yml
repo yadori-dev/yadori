@@ -20,6 +20,10 @@ pre-commit:
       glob: "backend/**/*.py"
       run: uv run python scripts/check_deps.py
 
+    classes:
+      glob: "backend/src/**/*.py"
+      run: uv run python scripts/check_classes.py
+
 commit-msg:
   commands:
     ai-footer:
@@ -40,4 +44,4 @@ pre-push:
         - "*.md"
         - "justfile"
         - "lefthook.yml"
-      run: just lint test check-trace check-deps stats
+      run: just lint test check-trace check-deps check-classes stats

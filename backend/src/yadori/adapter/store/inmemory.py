@@ -10,7 +10,7 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from yadori.adapter.embedding.characters import closeness
+from yadori.adapter.embedding.characters import Closeness
 from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Vector
 
 
@@ -27,6 +27,7 @@ class _Kept:
 class InMemoryMemories:
     def __init__(self) -> None:
         self._kept = _Kept()
+        self._closeness = Closeness()
 
     def settle(self, dweller: Dweller) -> None:
         self._kept.dwellers[dweller.id] = dweller
@@ -67,7 +68,7 @@ class InMemoryMemories:
     ) -> tuple[tuple[Episode, float], ...]:
         excluded = set(exclude)
         scored = [
-            (episode, closeness(vector, self._kept.index[episode.id][1]))
+            (episode, self._closeness.between(vector, self._kept.index[episode.id][1]))
             for episode in self._owned(dweller_id)
             if episode.id not in excluded and episode.id in self._kept.index
         ]

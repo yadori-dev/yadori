@@ -10,13 +10,14 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+from tests.sora import Ticking
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import Recollection
-from yadori.infrastructure.settings import read_settings
-from yadori.infrastructure.start import settle
+from yadori.infrastructure.settings import SettingsFile
+from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation, Turn
 
 NAME_DECLARED = "わたしはそらです。ていねいな言葉で話し、園芸を好みます。"
@@ -42,10 +43,10 @@ class _Silent:
 
 
 def _run(home: Path, spoken: str, voice: object) -> tuple[str, SqliteMemories]:
-    settings = read_settings(home)
+    settings = SettingsFile(home).read()
     memories = SqliteMemories(settings.memories_path)
-    settle(memories, settings)
-    conversation = Conversation(memories, CharacterPairs(), _clock())
+    Startup(home)._settle(memories, settings)
+    conversation = Conversation(memories, CharacterPairs(), Ticking())
     written = io.StringIO()
     Terminal(
         Turn(conversation, voice),  # type: ignore[arg-type]
@@ -54,12 +55,6 @@ def _run(home: Path, spoken: str, voice: object) -> tuple[str, SqliteMemories]:
         writing=written,
     ).listen()
     return written.getvalue(), memories
-
-
-def _clock() -> object:
-    from datetime import UTC, datetime
-
-    return lambda: datetime.now(UTC)
 
 
 def test_端末から話しかけると応対が返り記憶に残る(tmp_path: Path) -> None:

@@ -12,7 +12,7 @@ from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
 
-from yadori.adapter.embedding.characters import closeness
+from yadori.adapter.embedding.characters import Closeness
 from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Vector
 
 _SCHEMA = """
@@ -48,18 +48,9 @@ CREATE TABLE IF NOT EXISTS retrieval (
 """
 
 
-def _episode(row: sqlite3.Row) -> Episode:
-    return Episode(
-        id=row["id"],
-        utterance=row["utterance"],
-        reply=row["reply"],
-        identity_version=row["identity_version"],
-        happened_at=datetime.fromisoformat(row["happened_at"]),
-    )
-
-
 class SqliteMemories:
     def __init__(self, path: Path | str) -> None:
+        self._closeness = Closeness()
         self._connection = sqlite3.connect(path, isolation_level=None)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
@@ -67,6 +58,15 @@ class SqliteMemories:
 
     def close(self) -> None:
         self._connection.close()
+
+    def _as_episode(self, row: sqlite3.Row) -> Episode:
+        return Episode(
+            id=row["id"],
+            utterance=row["utterance"],
+            reply=row["reply"],
+            identity_version=row["identity_version"],
+            happened_at=datetime.fromisoformat(row["happened_at"]),
+        )
 
     def settle(self, dweller: Dweller) -> None:
         """宿りを住まわせる。名前と呼び名は宿り自身が持つ。"""
@@ -115,7 +115,7 @@ class SqliteMemories:
             "SELECT * FROM episode WHERE dweller_id = ? ORDER BY id DESC LIMIT ?",
             (dweller_id, limit),
         ).fetchall()
-        return tuple(_episode(row) for row in reversed(rows))
+        return tuple(self._as_episode(row) for row in reversed(rows))
 
     def search(
         self,
@@ -133,7 +133,10 @@ class SqliteMemories:
         ).fetchall()
         excluded = set(exclude)
         scored = [
-            (_episode(row), closeness(vector, tuple(json.loads(row["vector"]))))
+            (
+                self._as_episode(row),
+                self._closeness.between(vector, tuple(json.loads(row["vector"]))),
+            )
             for row in rows
             if row["id"] not in excluded
         ]
@@ -188,7 +191,7 @@ class SqliteMemories:
             " WHERE e.dweller_id = ? AND i.episode_id IS NULL ORDER BY e.id",
             (dweller_id,),
         ).fetchall()
-        return tuple(_episode(row) for row in rows)
+        return tuple(self._as_episode(row) for row in rows)
 
     def record_retrieval(self, episode_ids: Collection[int], at: datetime) -> None:
         self._connection.executemany(

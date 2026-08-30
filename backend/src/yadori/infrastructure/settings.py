@@ -32,47 +32,52 @@ class Settings:
         return self.home / "記憶.sqlite"
 
 
-def read_settings(home: Path | None = None) -> Settings:
-    """手元の設定から、誰を起こすかと名乗りを読む。
+class SettingsFile:
+    """手元の置き場から、誰を起こすかと名乗りを読む。"""
 
-    - 置き場を決める
-    - 誰であるかを読む
-    - 名乗りを読む
-    """
-    at = home or Path(os.environ.get("YADORI_HOME", DEFAULT_HOME))
-    dweller = _who(at)
-    return Settings(home=at, dweller=dweller, name_declared=_name_declared(at))
+    def __init__(self, home: Path | None = None) -> None:
+        self._home = home or Path(os.environ.get("YADORI_HOME", DEFAULT_HOME))
 
+    def read(self) -> Settings:
+        """設定を読む。
 
-def _who(home: Path) -> Dweller:
-    """宿りの名前、呼び名、持ち主を読む。"""
-    path = home / WHO
-    if not path.exists():
-        raise NotSettled(
-            f"{path} がありません。次の形で作ってください。\n"
-            '  name = "田中れいな"\n  nickname = "れいな"\n  owner = "あなたの名前"'
+        - 誰であるかを読む
+        - 名乗りを読む
+        """
+        return Settings(
+            home=self._home,
+            dweller=self._who(),
+            name_declared=self._name_declared(),
         )
-    written = tomllib.loads(path.read_text(encoding="utf-8"))
-    missing = [key for key in ("name", "nickname", "owner") if key not in written]
-    if missing:
-        raise NotSettled(f"{path} に {'、'.join(missing)} がありません。")
-    return Dweller(
-        id=str(written.get("id", written["nickname"])),
-        owner=str(written["owner"]),
-        name=str(written["name"]),
-        nickname=str(written["nickname"]),
-    )
 
-
-def _name_declared(home: Path) -> str:
-    """名乗りの文章を読む。項目に割らず、一続きの文章として扱う。"""
-    path = home / NAME_DECLARED
-    if not path.exists():
-        raise NotSettled(
-            f"{path} がありません。その宿りが誰であるかを、項目に分けず"
-            "一続きの文章で書いてください。"
+    def _who(self) -> Dweller:
+        """宿りの名前、呼び名、持ち主を読む。"""
+        path = self._home / WHO
+        if not path.exists():
+            raise NotSettled(
+                f"{path} がありません。次の形で作ってください。\n"
+                '  name = "田中れいな"\n  nickname = "れいな"\n  owner = "あなたの名前"'
+            )
+        written = tomllib.loads(path.read_text(encoding="utf-8"))
+        missing = [key for key in ("name", "nickname", "owner") if key not in written]
+        if missing:
+            raise NotSettled(f"{path} に {'、'.join(missing)} がありません。")
+        return Dweller(
+            id=str(written.get("id", written["nickname"])),
+            owner=str(written["owner"]),
+            name=str(written["name"]),
+            nickname=str(written["nickname"]),
         )
-    written = path.read_text(encoding="utf-8").strip()
-    if not written:
-        raise NotSettled(f"{path} が空です。")
-    return written
+
+    def _name_declared(self) -> str:
+        """名乗りの文章を読む。項目に割らず、一続きの文章として扱う。"""
+        path = self._home / NAME_DECLARED
+        if not path.exists():
+            raise NotSettled(
+                f"{path} がありません。その宿りが誰であるかを、項目に分けず"
+                "一続きの文章で書いてください。"
+            )
+        written = path.read_text(encoding="utf-8").strip()
+        if not written:
+            raise NotSettled(f"{path} が空です。")
+        return written
