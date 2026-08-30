@@ -9,6 +9,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import final
 
 from yadori.domain.memory import Dweller
 
@@ -21,6 +22,7 @@ class NotSettled(Exception):
     """宿りの設定が見つからない、または足りない。"""
 
 
+@final
 @dataclass(frozen=True)
 class Settings:
     home: Path
@@ -32,11 +34,12 @@ class Settings:
         return self.home / "記憶.sqlite"
 
 
+@final
 class SettingsFile:
     """手元の置き場から、誰を起こすかと名乗りを読む。"""
 
     def __init__(self, home: Path | None = None) -> None:
-        self._home = home or Path(os.environ.get("YADORI_HOME", DEFAULT_HOME))
+        self._home: Path = home or Path(os.environ.get("YADORI_HOME", str(DEFAULT_HOME)))
 
     def read(self) -> Settings:
         """設定を読む。
@@ -56,9 +59,9 @@ class SettingsFile:
         if not path.exists():
             raise NotSettled(
                 f"{path} がありません。次の形で作ってください。\n"
-                '  name = "田中れいな"\n  nickname = "れいな"\n  owner = "あなたの名前"'
+                + '  name = "田中れいな"\n  nickname = "れいな"\n  owner = "あなたの名前"'
             )
-        written = tomllib.loads(path.read_text(encoding="utf-8"))
+        written: dict[str, object] = tomllib.loads(path.read_text(encoding="utf-8"))
         missing = [key for key in ("name", "nickname", "owner") if key not in written]
         if missing:
             raise NotSettled(f"{path} に {'、'.join(missing)} がありません。")
@@ -75,7 +78,7 @@ class SettingsFile:
         if not path.exists():
             raise NotSettled(
                 f"{path} がありません。その宿りが誰であるかを、項目に分けず"
-                "一続きの文章で書いてください。"
+                + "一続きの文章で書いてください。"
             )
         written = path.read_text(encoding="utf-8").strip()
         if not written:

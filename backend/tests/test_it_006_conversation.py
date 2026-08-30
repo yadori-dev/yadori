@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from pathlib import Path
+from typing import final
 
 import pytest
 
@@ -30,32 +32,35 @@ from yadori.domain.memory import Episode, Memories, NameNotDeclared, Vector
 from yadori.usecase.conversation import Conversation
 
 
+@final
 class _FailingWrite:
     """原文を書く段で必ず失敗する保存先。ほかの操作は本物へ渡す。"""
 
     def __init__(self, inner: SqliteMemories) -> None:
-        self._inner = inner
+        self._inner: SqliteMemories = inner
 
     def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return getattr(self._inner, name)  # pyright: ignore[reportAny]
 
     def write_episode(self, *args: object, **kwargs: object) -> Episode:
         raise OSError("保存先を読み書きできない")
 
 
+@final
 class _FailingIndex:
     """索引を書く段でだけ失敗する保存先。原文は本物へ書く。"""
 
     def __init__(self, inner: SqliteMemories) -> None:
-        self._inner = inner
+        self._inner: SqliteMemories = inner
 
     def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return getattr(self._inner, name)  # pyright: ignore[reportAny]
 
     def write_index(self, *args: object, **kwargs: object) -> None:
         raise OSError("索引を書けない")
 
 
+@final
 class _SwappedEmbeddings:
     """別の作りの模型。文字一つずつを見るため、二つ組の実装とは違う結果になる。"""
 
@@ -64,10 +69,10 @@ class _SwappedEmbeddings:
         return "single-characters-v1"
 
     def of(self, text: str) -> Vector:
-        counts = [0.0] * 512
+        counts: list[float] = [0.0] * 512
         for character in "".join(text.split()):
             counts[hash(character) % 512] += 1.0
-        length = sum(count * count for count in counts) ** 0.5
+        length = math.sqrt(sum(count * count for count in counts))
         return tuple(count / length if length else 0.0 for count in counts)
 
 
@@ -86,7 +91,7 @@ def settle(memories: SqliteMemories | InMemoryMemories, *, declare_name: bool = 
 
 def make(memories: Memories, embeddings: object | None = None) -> Conversation:
     chosen = embeddings if embeddings is not None else CharacterPairs()
-    return Conversation(memories, chosen, Ticking(), HOW)  # type: ignore[arg-type]
+    return Conversation(memories, chosen, Ticking(), HOW)  # pyright: ignore[reportArgumentType]
 
 
 # IT-006-001 外の技術を差し替えても記憶の規則が変わらない
@@ -222,21 +227,22 @@ def test_IT_006_003_覚える途中で失敗すると何も増えない(
     talk(make(sqlite_memories), [PLANTED])
     kept = sqlite_memories.count_episodes(SORA.id)
 
-    failing: Memories = _FailingWrite(sqlite_memories)  # type: ignore[assignment]
+    failing: Memories = _FailingWrite(sqlite_memories)  # pyright: ignore[reportAssignmentType]
     with pytest.raises(OSError):
         make(failing).remember(SORA.id, "覚えられない発話", "返事")
 
     assert sqlite_memories.count_episodes(SORA.id) == kept
     assert sqlite_memories.retrieval(1).count == 0
-    assert sqlite_memories.current_identity(SORA.id) is not None
-    assert sqlite_memories.current_identity(SORA.id).version == 1  # type: ignore[union-attr]
+    current = sqlite_memories.current_identity(SORA.id)
+    assert current is not None
+    assert current.version == 1
 
 
 def test_IT_006_003_索引を書けなくても原文は残り後から作り直せる(
     sqlite_memories: SqliteMemories,
 ) -> None:
     settle(sqlite_memories)
-    failing: Memories = _FailingIndex(sqlite_memories)  # type: ignore[assignment]
+    failing: Memories = _FailingIndex(sqlite_memories)  # pyright: ignore[reportAssignmentType]
     with pytest.raises(OSError):
         make(failing).remember(SORA.id, PLANTED, "いいですね")
     # 直近から押し出さないと、意味で探す側に現れない。

@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
 from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Vector
@@ -24,10 +25,11 @@ class _Kept:
     next_id: int = 1
 
 
+@final
 class InMemoryMemories:
     def __init__(self) -> None:
-        self._kept = _Kept()
-        self._closeness = Closeness()
+        self._kept: _Kept = _Kept()
+        self._closeness: Closeness = Closeness()
 
     def settle(self, dweller: Dweller) -> None:
         self._kept.dwellers[dweller.id] = dweller
@@ -103,7 +105,7 @@ class InMemoryMemories:
 
     def clear_index(self, dweller_id: str) -> None:
         for episode in self._owned(dweller_id):
-            self._kept.index.pop(episode.id, None)
+            _ = self._kept.index.pop(episode.id, None)
 
     def episodes_without_index(self, dweller_id: str) -> tuple[Episode, ...]:
         return tuple(

@@ -49,7 +49,7 @@ def _run(home: Path, spoken: str, voice: object) -> tuple[str, SqliteMemories]:
     conversation = Conversation(memories, CharacterPairs(), Ticking())
     written = io.StringIO()
     Terminal(
-        Turn(conversation, voice),  # type: ignore[arg-type]
+        Turn(conversation, voice),  # pyright: ignore[reportArgumentType]
         settings.dweller,
         reading=io.StringIO(spoken),
         writing=written,
@@ -84,6 +84,7 @@ def test_名乗りを書き直すと新しい版になり以前の版も残る(t
     current = memories.current_identity("sora")
     assert current is not None
     assert current.version == 2
-    assert memories.identity_at("sora", 1) is not None
-    assert memories.identity_at("sora", 1).text == NAME_DECLARED  # type: ignore[union-attr]
+    first = memories.identity_at("sora", 1)
+    assert first is not None
+    assert first.text == NAME_DECLARED
     memories.close()

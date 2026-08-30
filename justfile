@@ -34,7 +34,7 @@ lint:
     @echo "── 書式と型 ──"
     uv run ruff format --check backend
     uv run ruff check backend
-    uv run mypy backend/src
+    uv run basedpyright
 
 test:
     @echo "── テスト ──"

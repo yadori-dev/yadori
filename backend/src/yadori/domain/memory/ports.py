@@ -20,7 +20,7 @@ class NameNotDeclared(Exception):
 
     def __init__(self, dweller_id: str) -> None:
         super().__init__(f"宿り {dweller_id} は名乗りを持っていない")
-        self.dweller_id = dweller_id
+        self.dweller_id: str = dweller_id
 
 
 class Memories(Protocol):

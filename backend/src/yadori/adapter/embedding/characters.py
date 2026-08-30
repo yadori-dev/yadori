@@ -12,12 +12,14 @@ from __future__ import annotations
 import math
 import zlib
 from collections import Counter
+from typing import final
 
 from yadori.domain.memory import Vector
 
 _DIMENSIONS = 512
 
 
+@final
 class CharacterPairs:
     @property
     def name(self) -> str:
@@ -43,6 +45,7 @@ class CharacterPairs:
         return zlib.crc32(pair.encode("utf-8")) % _DIMENSIONS
 
 
+@final
 class Closeness:
     """二つの並びがどれくらい近いか。
 

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import final
+
 import anthropic
 from anthropic.types.beta import BetaMessageParam
 
@@ -20,9 +22,10 @@ MAX_TOKENS = 4096
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+@final
 class ClaudeVoice:
     def __init__(self, client: anthropic.Anthropic | None = None) -> None:
-        self._client = client or anthropic.Anthropic()
+        self._client: anthropic.Anthropic = client or anthropic.Anthropic()
 
     def speak(self, recollection: Recollection, utterance: str) -> str:
         """名乗りと思い出したことから、応対の文章を作る。
@@ -42,11 +45,11 @@ class ClaudeVoice:
         if recollection.found:
             preface.append(
                 "\n以下は、いま話しかけられた内容から思い出したことです。"
-                "会話に出ていなくても、あなたは覚えています。"
+                + "会話に出ていなくても、あなたは覚えています。"
             )
             preface.extend(
                 f"- {one.episode.happened_at:%Y-%m-%d} "
-                f"「{one.episode.utterance}」に「{one.episode.reply}」と答えた"
+                + f"「{one.episode.utterance}」に「{one.episode.reply}」と答えた"
                 for one in recollection.found
             )
         return "\n".join(preface)

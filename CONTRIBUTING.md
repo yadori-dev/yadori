@@ -52,7 +52,7 @@ pushする前に気づいた場合は、コミットを作り直してから pus
 
 ## 開発環境
 
-必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。
+必要なものは Python 3.12以上、[uv](https://docs.astral.sh/uv/)、[just](https://github.com/casey/just)、[lefthook](https://github.com/evilmartians/lefthook)、[gitleaks](https://github.com/gitleaks/gitleaks) です。型検査は [basedpyright](https://docs.basedpyright.com/) を使い、警告も失敗として扱います。編集環境も同じ検査を使ってください。手元と CI で違う検査を使うと、片方だけが通る状態が続きます。
 
 ```console
 $ just setup     # 依存の取得とGitフックの導入
@@ -82,7 +82,7 @@ infrastructure → adapter → usecase → domain
 - エラーハンドリングは境界（利用者の入力、外部API）にだけ置く。内部の例外は伝播させる
 - 投機的な抽象化、将来用の汎化、使わない引数を書かない
 - コメントは「なぜそうするか」だけ書く。「何をするか」はコードが語る
-- 型を明示する。`Any` と型の言い換えは設計の敗北
+- 型を明示する。`Any` と型の言い換えは設計の敗北。型検査は `basedpyright` で行い、`just lint` と手元の編集環境で同じ結果になるようにする
 - 重複は、間違った共通化で縛るよりましなことがある。共通化の前に「これは機能を縛らないか」を問う
 
 ### テスト

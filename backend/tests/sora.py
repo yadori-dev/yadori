@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
+from typing import final
 
 from yadori.domain.memory import Dweller, HowToRecall
 from yadori.usecase.conversation import Conversation
@@ -43,11 +44,12 @@ POINTING = "それはどうなった"
 UNRELATED = "明日の天気"
 
 
+@final
 class Ticking:
     """呼ばれるたびに一分進む時計。I/O 境界なので置き換える。"""
 
     def __init__(self) -> None:
-        self._at = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
+        self._at: datetime = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
 
     def __call__(self) -> datetime:
         self._at += timedelta(minutes=1)

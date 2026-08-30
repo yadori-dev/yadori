@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import final
 
 from yadori.domain.conversation import Voice
 from yadori.domain.memory import Episode, Recollection
 from yadori.usecase.conversation.service import Conversation
 
 
+@final
 @dataclass(frozen=True)
 class Response:
     """一往復の結果。
@@ -26,12 +28,13 @@ class Response:
     episode: Episode
 
 
+@final
 class Turn:
     """話しかけられてから覚えるまでの一往復。"""
 
     def __init__(self, conversation: Conversation, voice: Voice) -> None:
-        self._conversation = conversation
-        self._voice = voice
+        self._conversation: Conversation = conversation
+        self._voice: Voice = voice
 
     def respond_to(self, dweller_id: str, utterance: str) -> Response:
         """話しかけられて、応対して、覚える。

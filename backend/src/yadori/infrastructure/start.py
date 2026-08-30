@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import final
 
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.place import Terminal
@@ -18,11 +19,12 @@ from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
 
 
+@final
 class Startup:
     """宿りを起こして、話しかけられるのを待つ。"""
 
     def __init__(self, home: Path | None = None) -> None:
-        self._settings_file = SettingsFile(home)
+        self._settings_file: SettingsFile = SettingsFile(home)
 
     def run(self) -> int:
         """起こして、待つ。
@@ -59,7 +61,7 @@ class Startup:
         memories.settle(settings.dweller)
         current = memories.current_identity(settings.dweller.id)
         if current is None or current.text != settings.name_declared:
-            memories.write_identity(settings.dweller.id, settings.name_declared)
+            _ = memories.write_identity(settings.dweller.id, settings.name_declared)
 
     def _assemble(self, memories: SqliteMemories) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。

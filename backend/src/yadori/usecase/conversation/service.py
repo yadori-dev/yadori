@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection
 from datetime import datetime
+from typing import final
 
 from yadori.domain.memory import (
     Embeddings,
@@ -24,6 +25,7 @@ from yadori.domain.memory import (
 )
 
 
+@final
 class Conversation:
     """会話の口。思い出すと覚えるの二つが一組である。"""
 
@@ -34,10 +36,10 @@ class Conversation:
         now: Callable[[], datetime],
         how: HowToRecall | None = None,
     ) -> None:
-        self._memories = memories
-        self._embeddings = embeddings
-        self._now = now
-        self._how = how or HowToRecall()
+        self._memories: Memories = memories
+        self._embeddings: Embeddings = embeddings
+        self._now: Callable[[], datetime] = now
+        self._how: HowToRecall = how or HowToRecall()
 
     def recall(self, dweller_id: str, utterance: str) -> Recollection:
         """話しかけられた文章から、応対を作る前に渡すものを組み立てる。
