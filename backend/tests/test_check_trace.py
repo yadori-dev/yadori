@@ -129,21 +129,21 @@ def test_ADR_の番号が重複していると落ちる(tmp_path: Path) -> None:
     assert "ADR-001 が重複している" in result.stderr
 
 
-INCREMENT = """# INC-001 例
+INCREMENT = """# INC-006 例
 
 | 要件 | 振る舞い |
 |---|---|
-| `SPEC-001` | 話しかけると応対が返る |
+| `SPEC-006-001` | 話しかけると応対が返る |
 
 | テスト | 対応 | 入口と入力 | 観測する結果 |
 |---|---|---|---|
-| `ST-001` | `SPEC-001` | 架空の宿りへ話しかける | 応対が返る |
+| `ST-006-001` | `SPEC-006-001` | 架空の宿りへ話しかける | 応対が返る |
 """
 
 
-def build_increment(root: Path, body: str) -> None:
+def build_increment(root: Path, body: str, name: str = "INC-006.md") -> None:
     build(root)
-    (root / "docs" / "210_increments" / "INC-001.md").write_text(body, encoding="utf-8")
+    (root / "docs" / "210_increments" / name).write_text(body, encoding="utf-8")
 
 
 def test_要件とテストが対なら通る(tmp_path: Path) -> None:
@@ -155,39 +155,59 @@ def test_要件とテストが対なら通る(tmp_path: Path) -> None:
 
 
 def test_確かめるテストの無い要件は落ちる(tmp_path: Path) -> None:
-    build_increment(tmp_path, INCREMENT + "| `SPEC-002` | 名乗りどおりに返る |\n")
+    build_increment(tmp_path, INCREMENT + "| `SPEC-006-002` | 名乗りどおりに返る |\n")
 
     result = run(tmp_path)
 
     assert result.returncode == 1
-    assert "SPEC-002 を確かめる ST が無い" in result.stderr
+    assert "SPEC-006-002 を確かめる ST が無い" in result.stderr
 
 
 def test_要件を指さないテストは落ちる(tmp_path: Path) -> None:
-    build_increment(tmp_path, INCREMENT + "| `ST-002` | | 何かする | 何か返る |\n")
+    build_increment(tmp_path, INCREMENT + "| `ST-006-002` | | 何かする | 何か返る |\n")
 
     result = run(tmp_path)
 
     assert result.returncode == 1
-    assert "ST-002 が対応する SPEC を指していない" in result.stderr
+    assert "ST-006-002 が対応する SPEC を指していない" in result.stderr
 
 
 def test_同じ増分に無い要件を指すテストは落ちる(tmp_path: Path) -> None:
-    build_increment(tmp_path, INCREMENT + "| `ST-002` | `SPEC-999` | 何かする | 何か返る |\n")
-
-    result = run(tmp_path)
-
-    assert result.returncode == 1
-    assert "ST-002 が同じ増分に無い SPEC-999 を指している" in result.stderr
-
-
-def test_設計と結合テストにも同じ規則が働く(tmp_path: Path) -> None:
     build_increment(
-        tmp_path,
-        INCREMENT + "\n| 判断 | 内容 |\n|---|---|\n| `AD-001` | 記憶を宿りへ結ぶ |\n",
+        tmp_path, INCREMENT + "| `ST-006-002` | `SPEC-006-999` | 何かする | 何か返る |\n"
     )
 
     result = run(tmp_path)
 
     assert result.returncode == 1
-    assert "AD-001 を確かめる IT が無い" in result.stderr
+    assert "ST-006-002 が同じ増分に無い SPEC-006-999 を指している" in result.stderr
+
+
+def test_設計と結合テストにも同じ規則が働く(tmp_path: Path) -> None:
+    build_increment(
+        tmp_path,
+        INCREMENT + "\n| 判断 | 内容 |\n|---|---|\n| `AD-006-001` | 記憶を宿りへ結ぶ |\n",
+    )
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "AD-006-001 を確かめる IT が無い" in result.stderr
+
+
+def test_別の増分の番号を挟んだ識別子は落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT.replace("`ST-006-001`", "`ST-007-001`"))
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "別の増分の番号を挟んでいる" in result.stderr
+
+
+def test_増分の名前がIssue番号でないと落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT, name="INC-最初.md")
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "INC-<Issue番号>.md でない" in result.stderr

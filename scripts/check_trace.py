@@ -14,10 +14,14 @@ from pathlib import Path
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 
-# 「定義」は各文書の表の左端に `ID` として現れる。
-DEFINITION = re.compile(r"^\|\s*`(?P<id>(?:PB|SC|REQ|AC|SPEC|ST|AD|IT)-\d{3})`")
-REFERENCE = re.compile(r"`((?:PB|SC|REQ|AC|SPEC|AD)-\d{3})`")
+# 増分をまたいで生きる識別子は、種別と連番だけを持つ。
+DEFINITION = re.compile(r"^\|\s*`(?P<id>(?:PB|SC|REQ|AC)-\d{3})`")
+REFERENCE = re.compile(r"`((?:PB|SC|REQ|AC)-\d{3})`")
 ADR_FILE = re.compile(r"^ADR-(\d{3})-")
+
+# 一つの増分の中だけで使う識別子は、種別・Issue番号・その増分の中の連番を持つ。
+INCREMENT_FILE = re.compile(r"^INC-(\d{3,})\.md$")
+SCOPED = re.compile(r"`(?:IDEA|SPEC|ST|AD|IT)-(?P<issue>\d{3,})-\d{3}`")
 
 
 def definitions(path: Path) -> dict[str, int]:
@@ -37,6 +41,23 @@ def references(path: Path) -> set[str]:
     return set(REFERENCE.findall(path.read_text(encoding="utf-8")))
 
 
+def scoped_to_issue(path: Path, issue: str) -> list[str]:
+    """増分の中の識別子が、その増分の Issue 番号を挟んでいるかを見る。
+
+    番号だけで所属が読めることがこの採番の目的なので、別の増分の番号が
+    混ざると意味が無くなる。
+    """
+    wrong = {
+        found
+        for found in SCOPED.finditer(path.read_text(encoding="utf-8"))
+        if found.group("issue") != issue
+    }
+    return [
+        f"{path.name}: {found.group(0)} が別の増分の番号を挟んでいる（{issue} のはず）"
+        for found in sorted(wrong, key=lambda m: m.group(0))
+    ]
+
+
 def paired(path: Path, upper: str, lower: str) -> list[str]:
     """増分の中で、上位の判断と、それを確かめるテストが対になっているかを見る。
 
@@ -45,8 +66,8 @@ def paired(path: Path, upper: str, lower: str) -> list[str]:
     """
     uppers: set[str] = set()
     lowers: dict[str, set[str]] = {}
-    row = re.compile(r"^\|\s*`(?P<id>(?:" + upper + "|" + lower + r")-\d{3})`")
-    reference = re.compile(r"`(" + upper + r"-\d{3})`")
+    row = re.compile(r"^\|\s*`(?P<id>(?:" + upper + "|" + lower + r")-\d{3,}-\d{3})`")
+    reference = re.compile(r"`(" + upper + r"-\d{3,}-\d{3})`")
 
     for line in path.read_text(encoding="utf-8").splitlines():
         match = row.match(line)
@@ -129,14 +150,21 @@ def main(argv: list[str]) -> int:
     for identifier in sorted(set(problems) - addressed):
         errors.append(f"{identifier} を扱う要求が無い")
 
-    # 増分が指す受入基準は実在すること
     for path in sorted(increments.glob("INC-*.md")):
+        name = INCREMENT_FILE.match(path.name)
+        if not name:
+            errors.append(f"{path.name} の名前が INC-<Issue番号>.md でない")
+            continue
+
+        # 増分が指す受入基準は実在すること
         for identifier in references(path):
             if identifier.startswith("AC-") and identifier not in criteria:
                 errors.append(f"{path.name} が存在しない {identifier} を指している")
 
-    # 増分の中で、要件とテストが対になっていること
-    for path in sorted(increments.glob("INC-*.md")):
+        # 増分の中の識別子が、その増分の Issue 番号を挟んでいること
+        errors.extend(scoped_to_issue(path, name.group(1)))
+
+        # 増分の中で、要件とテストが対になっていること
         errors.extend(paired(path, upper="SPEC", lower="ST"))
         errors.extend(paired(path, upper="AD", lower="IT"))
 
@@ -158,10 +186,11 @@ def main(argv: list[str]) -> int:
             print(f"  {line}", file=sys.stderr)
         return 1
 
+    increment_count = len(list(increments.glob("INC-*.md")))
     print(
         "識別子の対応: 問題なし "
         f"(PB {len(problems)} / SC {len(scenarios)} / REQ {len(demands)} "
-        f"/ AC {len(criteria)} / ADR {len(adr_numbers)})"
+        f"/ AC {len(criteria)} / ADR {len(adr_numbers)} / INC {increment_count})"
     )
     return 0
 
