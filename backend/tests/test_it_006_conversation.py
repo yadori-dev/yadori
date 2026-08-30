@@ -1,4 +1,4 @@
-"""INC-006 の結合テスト。
+"""INC-006 の結合テスト。思い出すと覚えるを確かめる。
 
 構造を選んだ理由を確かめる。動くことだけを見ない。架空の宿りで書き、
 利用者の実際の会話は使わない。
@@ -6,57 +6,28 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator
-from datetime import UTC, datetime, timedelta
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
+from tests.sora import (
+    ABOUT_TOMATO,
+    FILLERS,
+    HOW,
+    NAME_DECLARED,
+    PLANTED,
+    POINTING,
+    RECENT,
+    SORA,
+    UNRELATED,
+    Ticking,
+    talk,
+)
 from yadori.adapter.embedding.characters import CharacterPairs
 from yadori.adapter.store import InMemoryMemories, SqliteMemories
-from yadori.domain.memory import Dweller, Episode, HowToRecall, Memories, NameNotDeclared, Vector
+from yadori.domain.memory import Episode, Memories, NameNotDeclared, Vector
 from yadori.usecase.conversation import Conversation
-
-SORA = Dweller(id="sora", owner="架空の持ち主", name="そら", nickname="そら")
-NAME_DECLARED = "わたしはそらです。ていねいな言葉で話し、園芸を好みます。"
-
-# 値は測って直すものなので、規則を確かめるテストでは明示して固定する。
-# ここを直しても、確かめている規則そのものは変わらない。
-HOW = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.30)
-
-# 一件目は直近から外れ、意味で探す側にだけ現れる。
-PLANTED = "トマトを植えました"
-# 二件目から四件目も直近から外れる。園芸とも互いとも語が重ならないようにする。
-BEYOND_RECENT = [
-    "電車が遅れて困った",
-    "本を三冊借りた",
-    "洗濯物がよく乾いた",
-]
-# 残りは直近として必ず渡る六件。
-RECENT = [
-    "きのうは映画を観た",
-    "新しい鍵盤が届いた",
-    "夕飯がとてもおいしかった",
-    "早めに横になった",
-    "同僚が休みを取るらしい",
-    "近所で工事が始まる",
-]
-FILLERS = [*BEYOND_RECENT, *RECENT]
-ABOUT_TOMATO = "トマトはその後どうなりましたか"
-# 指す語だけの発話。意味で探しても何も出ない。
-POINTING = "それはどうなった"
-UNRELATED = "明日の天気"
-
-
-class _Ticking:
-    """呼ばれるたびに一分進む時計。I/O 境界なので置き換える。"""
-
-    def __init__(self) -> None:
-        self._at = datetime(2026, 8, 31, 9, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        self._at += timedelta(minutes=1)
-        return self._at
 
 
 class _FailingWrite:
@@ -113,14 +84,9 @@ def settle(memories: SqliteMemories | InMemoryMemories, *, declare_name: bool = 
         memories.write_identity(SORA.id, NAME_DECLARED)
 
 
-def talk(conversation: Conversation, utterances: Collection[str]) -> None:
-    for utterance in utterances:
-        conversation.remember(SORA.id, utterance, "はい、わかりました")
-
-
 def make(memories: Memories, embeddings: object | None = None) -> Conversation:
     chosen = embeddings if embeddings is not None else CharacterPairs()
-    return Conversation(memories, chosen, _Ticking(), HOW)  # type: ignore[arg-type]
+    return Conversation(memories, chosen, Ticking(), HOW)  # type: ignore[arg-type]
 
 
 # IT-006-001 外の技術を差し替えても記憶の規則が変わらない
