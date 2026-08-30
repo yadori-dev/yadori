@@ -16,11 +16,12 @@ $ cat ~/.yadori/dweller.toml
 name = "そら"
 nickname = "そら"
 owner = "あなたの名前"
+model = "opus"
 
 $ cat ~/.yadori/identity.md
 わたしはそらです。ていねいな言葉で話し、園芸を好みます。
 
-$ ANTHROPIC_API_KEY=... uv run python -m yadori
+$ uv run python -m yadori
 （そら が居ます。空行で終わります）
 > トマトを植えました
 そら: いいですね。日当たりはどうですか。
@@ -30,6 +31,11 @@ $ ANTHROPIC_API_KEY=... uv run python -m yadori
 名乗りは項目に分けず、一続きの文章で書きます。起動のたびに読み直し、変わっていれば新しい版になります。以前の版は消えません。
 
 記憶も名乗りも `YADORI_HOME`（既定は `~/.yadori`）に置き、リポジトリへは入れません。
+
+応対の文章は、手元の Claude Code を通して作ります。持ち主の定額契約で動くため、模型の提供元への鍵は要りません。
+
+> [!WARNING]
+> `ANTHROPIC_API_KEY` を設定しないでください。設定すると定額契約ではなく従量課金で動きます。
 
 ## 何が普通のAI対話と違うか
 

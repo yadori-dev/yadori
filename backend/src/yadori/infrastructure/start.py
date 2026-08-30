@@ -14,7 +14,7 @@ from typing import final
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.adapter.voice import ClaudeVoice
+from yadori.adapter.voice import ClaudeCodeVoice
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
 
@@ -43,7 +43,7 @@ class Startup:
         memories = SqliteMemories(settings.memories_path)
         try:
             self.settle(memories, settings)
-            Terminal(self._assemble(memories), settings.dweller).listen()
+            Terminal(self._assemble(memories, settings), settings.dweller).listen()
         finally:
             memories.close()
         return 0
@@ -63,13 +63,14 @@ class Startup:
         if current is None or current.text != settings.name_declared:
             _ = memories.write_identity(settings.dweller.id, settings.name_declared)
 
-    def _assemble(self, memories: SqliteMemories) -> Turn:
+    def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは文字の並びから作る実装を使う。応対の文章は模型が作る。
+        埋め込みは文字の並びから作る実装を使う。応対の文章は、持ち主の定額
+        契約で動く対話する道具が作る。
         """
         conversation = Conversation(memories, CharacterPairs(), self._now)
-        return Turn(conversation, ClaudeVoice())
+        return Turn(conversation, ClaudeCodeVoice(settings.model))
 
     def _now(self) -> datetime:
         return datetime.now(UTC)

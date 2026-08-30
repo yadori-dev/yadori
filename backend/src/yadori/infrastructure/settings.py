@@ -24,12 +24,16 @@ class NotSettled(Exception):
     """宿りの設定が見つからない、または足りない。"""
 
 
+DEFAULT_MODEL = "opus"
+
+
 @final
 @dataclass(frozen=True)
 class Settings:
     home: Path
     dweller: Dweller
     name_declared: str
+    model: str
 
     @property
     def memories_path(self) -> Path:
@@ -49,21 +53,31 @@ class SettingsFile:
         - 誰であるかを読む
         - 名乗りを読む
         """
+        written = self._written()
         return Settings(
             home=self._home,
-            dweller=self._who(),
+            dweller=self._who(written),
             name_declared=self._name_declared(),
+            model=self._model(written),
         )
 
-    def _who(self) -> Dweller:
-        """宿りの名前、呼び名、持ち主を読む。"""
+    def _written(self) -> dict[str, object]:
         path = self._home / WHO
         if not path.exists():
             raise NotSettled(
                 f"{path} がありません。次の形で作ってください。\n"
                 + '  name = "田中れいな"\n  nickname = "れいな"\n  owner = "あなたの名前"'
             )
-        written: dict[str, object] = tomllib.loads(path.read_text(encoding="utf-8"))
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+
+    def _model(self, written: dict[str, object]) -> str:
+        """どの模型で考えるか。宿りが誰であるかとは別の、動かし方の設定である。"""
+        chosen = written.get("model", DEFAULT_MODEL)
+        return str(chosen)
+
+    def _who(self, written: dict[str, object]) -> Dweller:
+        """宿りの名前、呼び名、持ち主を読む。"""
+        path = self._home / WHO
         missing = [key for key in ("name", "nickname", "owner") if key not in written]
         if missing:
             raise NotSettled(f"{path} に {'、'.join(missing)} がありません。")
