@@ -195,13 +195,28 @@ def test_設計と結合テストにも同じ規則が働く(tmp_path: Path) -> 
     assert "AD-006-001 を確かめる IT が無い" in result.stderr
 
 
-def test_別の増分の番号を挟んだ識別子は落ちる(tmp_path: Path) -> None:
-    build_increment(tmp_path, INCREMENT.replace("`ST-006-001`", "`ST-007-001`"))
+def test_別の増分の番号で定義された識別子は落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT.replace("| `ST-006-001`", "| `ST-007-001`"))
 
     result = run(tmp_path)
 
     assert result.returncode == 1
-    assert "別の増分の番号を挟んでいる" in result.stderr
+    assert "別の増分の番号を挟んで定義されている" in result.stderr
+
+
+def test_別の増分の判断を本文から指すのは通る(tmp_path: Path) -> None:
+    # 前の増分で決めた構造の上に積むことは正しい。
+    build_increment(
+        tmp_path,
+        INCREMENT.replace(
+            "| `SPEC-006-001` | 話しかけると応対が返る |",
+            "| `SPEC-006-001` | 話しかけると応対が返る（`AD-005-001` の口をそのまま使う） |",
+        ),
+    )
+
+    result = run(tmp_path)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_増分の名前がIssue番号でないと落ちる(tmp_path: Path) -> None:

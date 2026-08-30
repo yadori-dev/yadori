@@ -21,7 +21,9 @@ ADR_FILE = re.compile(r"^ADR-(\d{3})-")
 
 # 一つの増分の中だけで使う識別子は、種別・Issue番号・その増分の中の連番を持つ。
 INCREMENT_FILE = re.compile(r"^INC-(\d{3,})\.md$")
-SCOPED = re.compile(r"`(?:IDEA|SPEC|ST|AD|IT)-(?P<issue>\d{3,})-\d{3}`")
+# 定義は行頭の表の左端に現れる。別の増分の判断を本文から指すのは正しいため、
+# 定義だけを見る。
+SCOPED = re.compile(r"^\|\s*`(?:IDEA|SPEC|ST|AD|IT)-(?P<issue>\d{3,})-\d{3}`")
 
 
 def definitions(path: Path) -> dict[str, int]:
@@ -47,14 +49,14 @@ def scoped_to_issue(path: Path, issue: str) -> list[str]:
     番号だけで所属が読めることがこの採番の目的なので、別の増分の番号が
     混ざると意味が無くなる。
     """
-    wrong = {
-        found
-        for found in SCOPED.finditer(path.read_text(encoding="utf-8"))
-        if found.group("issue") != issue
-    }
+    wrong: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        found = SCOPED.match(line)
+        if found and found.group("issue") != issue:
+            wrong.append(line.split("`")[1])
     return [
-        f"{path.name}: {found.group(0)} が別の増分の番号を挟んでいる（{issue} のはず）"
-        for found in sorted(wrong, key=lambda m: m.group(0))
+        f"{path.name}: {name} が別の増分の番号を挟んで定義されている（{issue} のはず）"
+        for name in sorted(set(wrong))
     ]
 
 
