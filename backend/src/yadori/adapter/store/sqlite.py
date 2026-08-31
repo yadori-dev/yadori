@@ -1,6 +1,6 @@
 """手元のファイル一つへ記憶を持つ。
 
-原文と索引を別の表に置く。索引は原文から作り直せるため、消しても記憶は
+原文とインデックスを別の表に置く。インデックスは原文から作り直せるため、消しても記憶は
 失われない。
 """
 
@@ -91,11 +91,11 @@ class SqliteMemories:
         _ = self._connection.executescript(_SCHEMA)
 
     def _discard_old_index_table(self) -> None:
-        """以前の版が作った索引の表は、形が違えば捨てる。原文の表には触れない。
+        """以前の版が作ったインデックスの表は、形が違えば捨てる。原文の表には触れない。
 
-        索引は原文から作り直せる派生物である（ADR-006）。以前の形は記憶ごとに
-        一つの索引しか持てず、そのまま使うと模型ごとの索引が同じ場所へ黙って
-        上書きされる。捨てれば、起動時にいまの模型で作り直される。
+        インデックスは原文から作り直せる派生物である（ADR-006）。以前の形は記憶ごとに
+        一つのインデックスしか持てず、そのまま使うと埋め込みごとのインデックスが同じ場所へ黙って
+        上書きされる。捨てれば、起動時にいまの埋め込みで作り直される。
         """
         columns = self._all("PRAGMA table_info(episode_index)", ())
         if not columns:
@@ -165,7 +165,7 @@ class SqliteMemories:
         floor: float,
         exclude: Collection[int],
     ) -> tuple[tuple[Episode, float], ...]:
-        # 違う模型で作った索引は使わない。長さが違えば比べようとして落ち、
+        # 違う埋め込みで作ったインデックスは使わない。長さが違えば比べようとして落ち、
         # 長さが同じなら誤った近さを黙って出す。
         rows = self._all(
             "SELECT e.*, i.vector AS vector FROM episode e"
@@ -222,7 +222,7 @@ class SqliteMemories:
         )
 
     def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]:
-        """いまの模型の索引を持たない記憶。無視する側と同じ規則で決める。"""
+        """いまの埋め込みのインデックスを持たない記憶。無視する側と同じ規則で決める。"""
         rows = self._all(
             "SELECT e.* FROM episode e"
             + " LEFT JOIN episode_index i ON i.episode_id = e.id AND i.model = ?"
@@ -274,7 +274,7 @@ class SqliteMemories:
         )
 
     def _as_text(self, vector: Vector) -> str:
-        """索引を文字として持つ。JSON を通すと境界で型が消える。"""
+        """インデックスを文字として持つ。JSON を通すと境界で型が消える。"""
         return ",".join(repr(value) for value in vector)
 
     def _as_vector(self, row: Row) -> Vector:

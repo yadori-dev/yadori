@@ -49,7 +49,7 @@ class _FailingWrite:
 
 @final
 class _FailingIndex:
-    """索引を書く段でだけ失敗する保存先。原文は本物へ書く。"""
+    """インデックスを書く段でだけ失敗する保存先。原文は本物へ書く。"""
 
     def __init__(self, inner: SqliteMemories) -> None:
         self._inner: SqliteMemories = inner
@@ -59,12 +59,12 @@ class _FailingIndex:
 
     def write_index(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
-        raise OSError("索引を書けない")
+        raise OSError("インデックスを書けない")
 
 
 @final
 class _SwappedEmbeddings:
-    """別の作りの模型。文字一つずつを見るため、二つ組の実装とは違う結果になる。"""
+    """別の作りの埋め込み。文字一つずつを見るため、二つ組の実装とは違う結果になる。"""
 
     @property
     def name(self) -> str:
@@ -122,7 +122,7 @@ def test_IT_006_001_保存を差し替えても返る記憶と順序が変わら
     assert sqlite_memories.count_episodes(SORA.id) == other.count_episodes(SORA.id)
 
 
-def test_IT_006_001_模型を差し替えても規則は変わる_探した中身だけが変わりうる(
+def test_IT_006_001_埋め込みを差し替えても規則は変わる_探した中身だけが変わりうる(
     sqlite_memories: SqliteMemories,
 ) -> None:
     settle(sqlite_memories)
@@ -131,7 +131,7 @@ def test_IT_006_001_模型を差し替えても規則は変わる_探した中�
 
     recollection = conversation.recall(SORA.id, ABOUT_TOMATO)
 
-    # 模型が変われば探し当てる記憶は変わりうる。変わらないのは規則のほう。
+    # 埋め込みが変われば探し当てる記憶は変わりうる。変わらないのは規則のほう。
     assert [episode.utterance for episode in recollection.recent] == RECENT
     recent_ids = {episode.id for episode in recollection.recent}
     assert not recent_ids & {one.episode.id for one in recollection.found}
@@ -199,10 +199,10 @@ def test_IT_006_002_近さと思い出した記録を別々に読め呼ぶたび
     assert second.found[0].retrieval.last_at is not None
 
 
-# IT-006-003 原文が索引と失敗から独立している
+# IT-006-003 原文がインデックスと失敗から独立している
 
 
-def test_IT_006_003_索引を消して作り直しても原文と結果が変わらない(
+def test_IT_006_003_インデックスを消して作り直しても原文と結果が変わらない(
     sqlite_memories: SqliteMemories,
 ) -> None:
     settle(sqlite_memories)
@@ -240,7 +240,7 @@ def test_IT_006_003_覚える途中で失敗すると何も増えない(
     assert current.version == 1
 
 
-def test_IT_006_003_索引を書けなくても原文は残り後から作り直せる(
+def test_IT_006_003_インデックスを書けなくても原文は残り後から作り直せる(
     sqlite_memories: SqliteMemories,
 ) -> None:
     settle(sqlite_memories)
@@ -250,7 +250,7 @@ def test_IT_006_003_索引を書けなくても原文は残り後から作り直
     # 直近から押し出さないと、意味で探す側に現れない。
     talk(make(sqlite_memories), FILLERS)
 
-    # 原文は残る。索引は作り直せる派生物なので、失われても記憶は失われない。
+    # 原文は残る。インデックスは作り直せる派生物なので、失われても記憶は失われない。
     assert sqlite_memories.count_episodes(SORA.id) == 1 + len(FILLERS)
     conversation = make(sqlite_memories)
     assert conversation.rebuild_index(SORA.id) == 1

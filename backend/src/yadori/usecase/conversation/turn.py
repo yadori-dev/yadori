@@ -52,7 +52,7 @@ class Turn:
         return Response(reply=reply, recollection=recollection, episode=episode)
 
     def rebuild_index(self, dweller_id: str) -> int:
-        """いまの模型の索引が無い記憶へ、索引を作る。"""
+        """いまの埋め込みのインデックスが無い記憶へ、インデックスを作る。"""
         return self._conversation.rebuild_index(dweller_id)
 
     def _recall(self, dweller_id: str, utterance: str) -> Recollection:

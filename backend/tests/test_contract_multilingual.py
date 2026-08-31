@@ -1,12 +1,12 @@
-"""意味を見る埋め込みの契約テスト。実物の模型に当てる。
+"""意味を見る埋め込みの契約テスト。実物のAIモデルに当てる。
 
-`HowToRecall` の下限 0.50 は、この模型と道具の版で測って決めた値である。道具の
+`HowToRecall` の下限 0.50 は、このAIモデルと道具の版で測って決めた値である。道具の
 版が上がって数の並びの作り方が変わると、下限の意味も変わる。ここで固定した
 観測値と実物を突き合わせ、ずれた時点で落ちるようにする。落ちたら測り直す。
 
-模型を読み込むため遅く、初回は取得のため外へ繋がる。通常の実行から分ける
+AIモデルを読み込むため遅く、初回は取得のため外へ繋がる。通常の実行から分ける
 （`just test-contract`）。`ST-025-004` の「鍵が無く外へ繋がらなくても思い出せる」
-は、取得済みの模型で通ることをここで確かめる。
+は、取得済みのAIモデルで通ることをここで確かめる。
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class TestMultilingualContract:
         assert unrelated < FLOOR
 
     def test_鍵を持たず外へ繋がらない前提で使える(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 取得済みの模型は鍵無しで読める。提供元の鍵が環境に無いことも確かめる。
+        # 取得済みのAIモデルは鍵無しで読める。提供元の鍵が環境に無いことも確かめる。
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("HF_TOKEN", raising=False)
 

@@ -31,8 +31,8 @@ USAGE = (
     + "                                      対話する道具の記録から、評価セットの\n"
     + "                                      下書きを作る。件は人が確かめるまで測れない\n"
     + "\n"
-    + "  --from は Claude Code の記録の置き場（~/.claude/projects）や Codex の\n"
-    + "  記録の置き場（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す\n"
+    + "  --from は Claude Code の記録のディレクトリ（~/.claude/projects）や Codex の\n"
+    + "  記録のディレクトリ（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す\n"
     + "  仕組みで前の発話の候補を引き、その発話と候補だけを判定のため手元の\n"
     + "  Claude Code へ渡す。Claude Code の記録は普段と同じ相手へ渡るが、Codex の\n"
     + "  記録は判定のために別の相手へ渡ることになる。返事、時刻、作業場所は渡らず、\n"
@@ -65,7 +65,7 @@ class Entry:
         return 1
 
     def _draft(self) -> int:
-        """記録の置き場と出力先を読み取り、下書きを作る。読めない書き方なら使い方を書く。"""
+        """記録のディレクトリと出力先を読み取り、下書きを作る。読めない書き方なら使い方を書く。"""
         rest = self._argv[2:]
         places: list[Path] = []
         out: Path | None = None
@@ -122,7 +122,7 @@ class Entry:
         return None
 
     def _multilingual(self, model: str | None = None) -> Multilingual:
-        """会話と同じ置き場の模型で測る。取り直さない。"""
+        """会話と同じ `YADORI_HOME` の下の `models/` にある AIモデルで測る。取り直さない。"""
         cache_dir = SettingsFile().models_path
         if model is None:
             return Multilingual(cache_dir=cache_dir)

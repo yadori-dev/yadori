@@ -38,7 +38,7 @@ class DraftFile:
                 f"出力先 {path} はリポジトリの配下です。会話の原文はリポジトリへ入れません"
             )
         if not path.parent.is_dir():
-            raise CannotDraft(f"出力先の置き場 {path.parent} がありません")
+            raise CannotDraft(f"出力先のディレクトリ {path.parent} がありません")
 
     def _text(self, recall_eval: RecallEval, drawn_with: str) -> str:
         lines = [HEADING + f"# 候補を引いた {drawn_with}\n", f"within = {recall_eval.within}", ""]

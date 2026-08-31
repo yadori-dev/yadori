@@ -42,7 +42,7 @@ class Conversation:
             tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
         )
         if not self._ways:
-            # 道が無いと、原文だけ書かれて索引が作られず、思い出すと常に空になる。
+            # 道が無いと、原文だけ書かれてインデックスが作られず、思い出すと常に空になる。
             raise ValueError("思い出す道が一つも無い")
         self._now: Callable[[], datetime] = now
         self._how: HowToRecall = how or HowToRecall()
@@ -67,7 +67,7 @@ class Conversation:
         - 名乗りを確かめる（無ければ原文を書く前に断る）
         - 数の並びを先に作る（埋め込みを使えなければここで断る）
         - 原文を確定する
-        - 索引を書く
+        - インデックスを書く
         """
         identity = self._declared_identity(dweller_id)
         made = self._made(utterance)
@@ -76,10 +76,10 @@ class Conversation:
         return episode
 
     def rebuild_index(self, dweller_id: str) -> int:
-        """索引を原文から作り直す。
+        """インデックスを原文から作り直す。
 
-        - 索引を持たない原文を集める
-        - 一件ずつ索引を作る
+        - インデックスを持たない原文を集める
+        - 一件ずつインデックスを作る
 
         原文は読むだけで変えない。
         """
@@ -182,7 +182,7 @@ class Conversation:
         return tuple((way.name, way.of(utterance)) for way in self._ways)
 
     def _write_index(self, episode: Episode, made: tuple[tuple[str, Vector], ...]) -> None:
-        """作っておいた数の並びを索引として書く。
+        """作っておいた数の並びをインデックスとして書く。
 
         原文を確定した後に呼ぶ。ここで失敗しても原文は残り、後から作り直せる。
         """

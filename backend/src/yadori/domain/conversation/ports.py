@@ -1,6 +1,6 @@
 """会話が外へ求めること。
 
-実装は adapter が持つ。この層は模型の種類も呼び方も知らない。
+実装は adapter が持つ。この層はAIモデルの種類も呼び方も知らない。
 """
 
 from __future__ import annotations

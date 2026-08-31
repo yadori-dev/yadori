@@ -46,7 +46,7 @@ class Measuring:
         - 指す先が揃っているか確かめる
         - 確認前の件が無いか確かめる
         - 使い捨ての記憶へやりとりを入れる
-        - 索引が揃っているか確かめる
+        - インデックスが揃っているか確かめる
         - 件ごとに思い出して順位を取る
         """
         self._check_pointing()
@@ -86,14 +86,14 @@ class Measuring:
         return kept
 
     def _check_indexed(self, kept: Memories) -> None:
-        """索引を持たないやりとりが無いことを確かめる。"""
+        """インデックスを持たないやりとりが無いことを確かめる。"""
         missing = [
             episode
             for way in self._ways
             for episode in kept.episodes_without_index(MEASURED.id, way.name)
         ]
         if missing:
-            raise CannotMeasure(f"索引を持たないやりとりがある: {len(missing)}件")
+            raise CannotMeasure(f"インデックスを持たないやりとりがある: {len(missing)}件")
 
     def _outcome(self, conversation: Conversation, case: Case) -> Outcome:
         """一件を測る。探した記憶だけを見る。直近は数えない。

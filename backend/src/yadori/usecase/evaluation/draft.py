@@ -104,10 +104,10 @@ class Drafting:
         for place in places:
             if place.is_file():
                 raise CannotDraft(
-                    f"記録の置き場 {place} はファイルです。ディレクトリを指してください"
+                    f"指した先 {place} はファイルです。記録のディレクトリを指してください"
                 )
             if not place.is_dir():
-                raise CannotDraft(f"記録の置き場 {place} がありません")
+                raise CannotDraft(f"記録のディレクトリ {place} がありません")
             for path in sorted(place.rglob("*.jsonl")):
                 read, skipped_one = self._one_file(path)
                 recorded.extend(read)
@@ -130,7 +130,7 @@ class Drafting:
         return [one for one in recorded if one.has_substance()]
 
     def _deduplicated(self, recorded: Sequence[Recorded]) -> list[Recorded]:
-        """同じ文言は置き場全体で最初の一つだけを残す。測る側は文言で照合する。"""
+        """同じ文言は指したディレクトリ全体で最初の一つだけを残す。測る側は文言で照合する。"""
         seen: set[str] = set()
         kept: list[Recorded] = []
         for one in recorded:
