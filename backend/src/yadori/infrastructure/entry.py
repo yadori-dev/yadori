@@ -18,7 +18,7 @@ USAGE = (
     "使い方:\n"
     + "  python -m yadori                    宿りを起こして話す\n"
     + "  python -m yadori measure            今の条件で測る\n"
-    + "  python -m yadori measure [--eval PATH] [--embedding NAME]\n"
+    + "  python -m yadori measure [--eval PATH] [--embedding NAME(+NAME)]\n"
     + "                          [--floor N] [--recent N] [--limit N]\n"
     + "                                      条件を変えて測り、件ごとの差を出す\n"
     + "\n"
@@ -65,17 +65,24 @@ class Entry:
             return 1
         return Measure(eval_path=eval_path, changed=changed, embeddings=embeddings).run()
 
-    def _embeddings(self, given: dict[str, str]) -> Embeddings | None:
-        """どの埋め込みで測るか。省けば既定のものを使う。"""
+    def _embeddings(self, given: dict[str, str]) -> Embeddings | list[Embeddings] | None:
+        """どの道で測るか。加算で並べると、両方の道から渡す形になる。"""
         chosen = given.pop("--embedding", None)
         if chosen is None:
-            return CharacterPairs()
-        if chosen == "characters":
-            return CharacterPairs()
-        if chosen == "multilingual":
             return Multilingual()
-        if "/" in chosen:
-            return Multilingual(chosen)
+        ways = [self._one(name) for name in chosen.split("+")]
+        if any(way is None for way in ways):
+            return None
+        picked = [way for way in ways if way is not None]
+        return picked[0] if len(picked) == 1 else picked
+
+    def _one(self, name: str) -> Embeddings | None:
+        if name == "characters":
+            return CharacterPairs()
+        if name == "multilingual":
+            return Multilingual()
+        if "/" in name:
+            return Multilingual(name)
         return None
 
     def _eval_path(self, given: dict[str, str]) -> Path | None:

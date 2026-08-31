@@ -75,7 +75,7 @@ expected = ["tomato"]
 forbidden = ["tax", "train"]
 
 [[case]]
-name = "近い話題どうしを両方引く"
+name = "言い換えで園芸の話を引く"
 utterance = "植物の世話について教えてください"
 expected = ["tomato", "watering"]
 forbidden = ["train"]

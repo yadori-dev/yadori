@@ -73,7 +73,9 @@ expected = []
 forbidden = ["train"]
 """
 
-# 既定より締めると、引ける件が出なくなり、混ざる件の混入が消える。
+# 語の重なりを見る埋め込みに合う条件。既定は埋め込みごとに違うため固定する。
+BASELINE = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.21)
+# 締めると、引ける件が出なくなり、混ざる件の混入が消える。
 TIGHTER = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.35)
 
 
@@ -82,7 +84,11 @@ class TestMeasure:
         writing = io.StringIO()
         # 測る仕組みを確かめるため、埋め込みは固定する。替えると数が変わる。
         code = Measure(
-            eval_path=path, changed=changed, embeddings=CharacterPairs(), writing=writing
+            eval_path=path,
+            baseline=BASELINE,
+            changed=changed,
+            embeddings=CharacterPairs(),
+            writing=writing,
         ).run()
         return writing.getvalue(), code
 

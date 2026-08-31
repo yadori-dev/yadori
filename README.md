@@ -41,6 +41,7 @@ $ uv run python -m yadori
 
 ```console
 $ uv run python -m yadori measure
+埋め込み: paraphrase-multilingual-MiniLM-L12-v2
 5件中 4件で期待したやりとりが上位3件に入った
 出てはいけないやりとりが出た件: 0件
   満たさず: 「近い話題どうしを両方引く」期待: tomato 出ず、watering 出ず

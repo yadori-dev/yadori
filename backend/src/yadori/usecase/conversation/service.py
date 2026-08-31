@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from typing import final
 
@@ -22,6 +22,7 @@ from yadori.domain.memory import (
     Memories,
     NameNotDeclared,
     Recollection,
+    Vector,
 )
 
 
@@ -32,12 +33,14 @@ class Conversation:
     def __init__(
         self,
         memories: Memories,
-        embeddings: Embeddings,
+        embeddings: Embeddings | Sequence[Embeddings],
         now: Callable[[], datetime],
         how: HowToRecall | None = None,
     ) -> None:
         self._memories: Memories = memories
-        self._embeddings: Embeddings = embeddings
+        self._ways: tuple[Embeddings, ...] = (
+            tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
+        )
         self._now: Callable[[], datetime] = now
         self._how: HowToRecall = how or HowToRecall()
 
@@ -59,12 +62,14 @@ class Conversation:
         """一度のやりとりを、原文のまま記憶へ加える。
 
         - 名乗りを確かめる（無ければ原文を書く前に断る）
+        - 数の並びを先に作る（埋め込みを使えなければここで断る）
         - 原文を確定する
-        - 索引を作る
+        - 索引を書く
         """
         identity = self._declared_identity(dweller_id)
+        made = self._made(utterance)
         episode = self._keep_episode(dweller_id, utterance, reply, identity)
-        self._build_index(episode)
+        self._write_index(episode, made)
         return episode
 
     def rebuild_index(self, dweller_id: str) -> int:
@@ -75,10 +80,12 @@ class Conversation:
 
         原文は読むだけで変えない。
         """
-        missing = self._memories.episodes_without_index(dweller_id, self._embeddings.name)
-        for episode in missing:
-            self._build_index(episode)
-        return len(missing)
+        rebuilt = 0
+        for way in self._ways:
+            for episode in self._memories.episodes_without_index(dweller_id, way.name):
+                self._memories.write_index(episode.id, way.name, way.of(episode.utterance))
+                rebuilt += 1
+        return rebuilt
 
     # 思い出す
 
@@ -106,22 +113,48 @@ class Conversation:
 
         同じ記憶が二つの道で現れると、何が効いたのかを読めなくなる。
         """
+        skip = [episode.id for episode in recent]
+        by_way = [self._by(way, dweller_id, utterance, skip) for way in self._ways]
+        return self._woven(by_way)
+
+    def _by(
+        self, way: Embeddings, dweller_id: str, utterance: str, skip: list[int]
+    ) -> tuple[Found, ...]:
+        """一つの道で探す。"""
         hits = self._memories.search(
             dweller_id,
-            self._embeddings.name,
-            self._embeddings.of(utterance),
+            way.name,
+            way.of(utterance),
             self._how.found_limit,
             self._how.relevance_floor,
-            exclude=[episode.id for episode in recent],
+            exclude=skip,
         )
-        return tuple(self._with_retrieval(episode, relevance) for episode, relevance in hits)
+        return tuple(
+            self._with_retrieval(episode, relevance, way.name) for episode, relevance in hits
+        )
 
-    def _with_retrieval(self, episode: Episode, relevance: float) -> Found:
+    def _woven(self, by_way: list[tuple[Found, ...]]) -> tuple[Found, ...]:
+        """道ごとの結果を、順位の高いものから交互に並べる。
+
+        点数を混ぜない。混ぜると、どの道が効いたかを読めなくなる。同じ記憶が
+        二つの道で出たら、先に出たほうだけを渡す。
+        """
+        woven: list[Found] = []
+        seen: set[int] = set()
+        for place in range(self._how.found_limit):
+            for found in by_way:
+                if place < len(found) and found[place].episode.id not in seen:
+                    seen.add(found[place].episode.id)
+                    woven.append(found[place])
+        return tuple(woven[: self._how.found_limit])
+
+    def _with_retrieval(self, episode: Episode, relevance: float, by: str) -> Found:
         """近さと思い出した記録を、別の値として並べる。一つの点数へ混ぜない。"""
         return Found(
             episode=episode,
             relevance=relevance,
             retrieval=self._memories.retrieval(episode.id),
+            by=by,
         )
 
     def _record_retrieval(self, found: Collection[Found]) -> None:
@@ -138,11 +171,17 @@ class Conversation:
             dweller_id, utterance, reply, identity.version, self._now()
         )
 
-    def _build_index(self, episode: Episode) -> None:
-        """原文から索引を作る。
+    def _made(self, utterance: str) -> tuple[tuple[str, Vector], ...]:
+        """道ごとに数の並びを作る。
+
+        原文を書く前に呼ぶ。埋め込みを使えないときは、ここで断って何も書かない。
+        """
+        return tuple((way.name, way.of(utterance)) for way in self._ways)
+
+    def _write_index(self, episode: Episode, made: tuple[tuple[str, Vector], ...]) -> None:
+        """作っておいた数の並びを索引として書く。
 
         原文を確定した後に呼ぶ。ここで失敗しても原文は残り、後から作り直せる。
         """
-        self._memories.write_index(
-            episode.id, self._embeddings.name, self._embeddings.of(episode.utterance)
-        )
+        for name, vector in made:
+            self._memories.write_index(episode.id, name, vector)

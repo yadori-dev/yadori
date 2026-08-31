@@ -6,10 +6,11 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO, final
 
-from yadori.adapter.embedding import CharacterPairs
+from yadori.adapter.embedding import Multilingual
 from yadori.adapter.evaluation import EvalFile
 from yadori.adapter.store import InMemoryMemories
 from yadori.domain.evaluation import CannotMeasure, Difference, Measurement, Outcome
@@ -26,13 +27,15 @@ class Measure:
     def __init__(
         self,
         eval_path: Path | None = None,
+        baseline: HowToRecall | None = None,
         changed: HowToRecall | None = None,
-        embeddings: Embeddings | None = None,
+        embeddings: Embeddings | Sequence[Embeddings] | None = None,
         writing: TextIO | None = None,
     ) -> None:
         self._eval_path: Path = eval_path or DEFAULT_EVAL
+        self._baseline: HowToRecall = baseline or HowToRecall()
         self._changed: HowToRecall | None = changed
-        self._embeddings: Embeddings = embeddings or CharacterPairs()
+        self._embeddings: Embeddings | Sequence[Embeddings] = embeddings or Multilingual()
         self._writing: TextIO = writing or sys.stdout
 
     def run(self) -> int:
@@ -45,7 +48,7 @@ class Measure:
         try:
             recall_eval = EvalFile(self._eval_path).read()
             measuring = Measuring(recall_eval, InMemoryMemories, self._embeddings)
-            now = measuring.at(HowToRecall())
+            now = measuring.at(self._baseline)
             self._write(now)
             if self._changed is not None:
                 self._write_difference(measuring, now, self._changed)
@@ -54,9 +57,14 @@ class Measure:
             return 1
         return 0
 
+    def _named(self) -> str:
+        if isinstance(self._embeddings, Sequence):
+            return "＋".join(way.name for way in self._embeddings)
+        return self._embeddings.name
+
     def _write(self, measurement: Measurement) -> None:
         """要約と、満たさなかった件を書く。要約は件ごとの結果から求める。"""
-        self._say(f"埋め込み: {self._embeddings.name}")
+        self._say(f"埋め込み: {self._named()}")
         self._say(
             f"{measurement.total}件中 {measurement.met}件で"
             + f"期待したやりとりが上位{measurement.within}件に入った"

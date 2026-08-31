@@ -913,11 +913,13 @@ wheels = [
 name = "yadori"
 version = "0.0.0"
 source = { editable = "." }
+dependencies = [
+    { name = "fastembed" },
+]
 
 [package.optional-dependencies]
 dev = [
     { name = "basedpyright" },
-    { name = "fastembed" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -930,7 +932,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.39" },
-    { name = "fastembed", marker = "extra == 'dev'", specifier = ">=0.7.4" },
+    { name = "fastembed", specifier = ">=0.7.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
