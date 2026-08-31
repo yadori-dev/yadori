@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
 from typing import final
 
 from yadori.domain.evaluation import (
@@ -20,6 +19,7 @@ from yadori.domain.evaluation import (
 )
 from yadori.domain.memory import Dweller, Embeddings, Found, HowToRecall, Memories
 from yadori.usecase.conversation import Conversation
+from yadori.usecase.evaluation.ticking import Ticking
 
 MEASURED = Dweller(id="measured", owner="測るためだけの持ち主", name="測り手", nickname="測り手")
 NAME_DECLARED = "測るためだけの名乗り。応対は作らない。"
@@ -44,11 +44,13 @@ class Measuring:
         """その条件で全件を測る。
 
         - 指す先が揃っているか確かめる
+        - 確認前の件が無いか確かめる
         - 使い捨ての記憶へやりとりを入れる
         - 索引が揃っているか確かめる
         - 件ごとに思い出して順位を取る
         """
         self._check_pointing()
+        self._check_confirmed()
         kept = self._filled()
         self._check_indexed(kept)
         conversation = Conversation(kept, self._embeddings, self._clock(), how)
@@ -58,17 +60,20 @@ class Measuring:
         )
 
     def _check_pointing(self) -> None:
-        """件が指すやりとりが、評価セットの中に在ることを確かめる。"""
-        known = {exchange.name for exchange in self._eval.exchanges}
-        for case in self._eval.cases:
-            unknown = sorted((set(case.expected) | set(case.forbidden)) - known)
-            if unknown:
-                raise CannotMeasure(f"件「{case.name}」が無いやりとりを指している: {unknown}")
-            both = sorted(set(case.expected) & set(case.forbidden))
-            if both:
-                raise CannotMeasure(
-                    f"件「{case.name}」が同じやりとりを期待と禁止に指している: {both}"
-                )
+        """件が指すやりとりが評価セットの中に在り、名前が重なっていないことを確かめる。"""
+        self._eval.verify_pointing()
+
+    def _check_confirmed(self) -> None:
+        """人が確かめていない件が無いことを確かめる。
+
+        下書きから作った件は確認前の印を持つ。確かめていない期待を測ると、
+        判定した側の癖がそのまま思い出す質の値になる。
+        """
+        if self._eval.unconfirmed:
+            raise CannotMeasure(
+                f"確認していない件が {self._eval.unconfirmed} 件あります。"
+                + "各件を読み、残す件は confirmed = true にしてください"
+            )
 
     def _filled(self) -> Memories:
         """使い捨ての記憶へ、評価セットのやりとりを順に入れる。"""
@@ -120,16 +125,6 @@ class Measuring:
                 return exchange.utterance
         raise CannotMeasure(f"やりとり「{name}」が評価セットに無い")
 
-    def _clock(self) -> _Ticking:
+    def _clock(self) -> Ticking:
         """測るたびに同じ時刻から進める。結果を時刻に左右させない。"""
-        return _Ticking()
-
-
-@final
-class _Ticking:
-    def __init__(self) -> None:
-        self._at: datetime = datetime(2000, 1, 1, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        self._at += timedelta(minutes=1)
-        return self._at
+        return Ticking()

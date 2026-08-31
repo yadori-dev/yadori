@@ -11,6 +11,7 @@ from typing import final
 
 from yadori.adapter.embedding import CharacterPairs, Multilingual
 from yadori.domain.memory import Embeddings, HowToRecall
+from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.measure import Measure
 from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
@@ -24,7 +25,20 @@ USAGE = (
     + "                                      条件を変えて測り、件ごとの差を出す\n"
     + "\n"
     + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
-    + "  セットは手元に置き、--eval で指す。リポジトリへ入れない。"
+    + "  セットは手元に置き、--eval で指す。リポジトリへ入れない。\n"
+    + "\n"
+    + "  python -m yadori evals draft --from PATH [--from PATH] --out FILE\n"
+    + "                                      対話する道具の記録から、評価セットの\n"
+    + "                                      下書きを作る。件は人が確かめるまで測れない\n"
+    + "\n"
+    + "  --from は Claude Code の記録の置き場（~/.claude/projects）や Codex の\n"
+    + "  記録の置き場（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す\n"
+    + "  仕組みで前の発話の候補を引き、その発話と候補だけを判定のため手元の\n"
+    + "  Claude Code へ渡す。Claude Code の記録は普段と同じ相手へ渡るが、Codex の\n"
+    + "  記録は判定のために別の相手へ渡ることになる。返事、時刻、作業場所は渡らず、\n"
+    + "  記録を丸ごと渡すこともない。思い出す仕組みが拾えなかった組は下書きに\n"
+    + "  出ないので手で足す。直近の範囲の組は測れないので足さない。--out は\n"
+    + "  リポジトリの外を指す。既にあるファイルには書かない。"
 )
 
 
@@ -38,14 +52,35 @@ class Entry:
 
         - 引数が無ければ話す
         - measure なら測る
+        - evals draft なら記録から評価セットの下書きを作る
         - それ以外は使い方を書く
         """
         if not self._argv:
             return Startup().run()
         if self._argv[0] == "measure":
             return self._measure()
+        if self._argv[:2] == ["evals", "draft"]:
+            return self._draft()
         print(USAGE, file=sys.stderr)
         return 1
+
+    def _draft(self) -> int:
+        """記録の置き場と出力先を読み取り、下書きを作る。読めない書き方なら使い方を書く。"""
+        rest = self._argv[2:]
+        places: list[Path] = []
+        out: Path | None = None
+        for name, value in zip(rest[::2], rest[1::2], strict=False):
+            if name == "--from":
+                places.append(Path(value))
+            elif name == "--out" and out is None:
+                out = Path(value)
+            else:
+                print(USAGE, file=sys.stderr)
+                return 1
+        if len(rest) % 2 != 0 or not places or out is None:
+            print(USAGE, file=sys.stderr)
+            return 1
+        return Drafter(places, out).run()
 
     def _measure(self) -> int:
         rest = self._argv[1:]

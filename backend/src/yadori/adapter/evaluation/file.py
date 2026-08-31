@@ -1,6 +1,7 @@
 """評価セットをファイルから読む。
 
-架空の会話で書く。利用者の実際の会話を置かない。
+リポジトリに置くものは架空の会話で書く。実際の会話から作ったものは手元に置く。
+読むだけで判断しない。確認前の件を断るのは測る側である。
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ class EvalFile:
             Exchange(
                 name=self._text(row, "name"),
                 utterance=self._text(row, "utterance"),
-                reply=self._text(row, "reply"),
+                reply=self._text(row, "reply", allow_empty=True),
             )
             for row in self._rows(written, "exchange")
         )
@@ -59,9 +60,19 @@ class EvalFile:
                 utterance=self._text(row, "utterance"),
                 expected=self._names(row, "expected"),
                 forbidden=self._names(row, "forbidden"),
+                confirmed=self._confirmed(row),
             )
             for row in self._rows(written, "case")
         )
+
+    def _confirmed(self, row: dict[str, object]) -> bool | None:
+        """確認済みの印。欄が無ければ人が書いた件であり、判断は測る側が持つ。"""
+        value = row.get("confirmed")
+        if value is None:
+            return None
+        if not isinstance(value, bool):
+            raise CannotMeasure("confirmed は true か false で書いてください")
+        return value
 
     def _rows(self, written: dict[str, object], key: str) -> list[dict[str, object]]:
         rows = written.get(key)
@@ -74,9 +85,10 @@ class EvalFile:
             found.append(row)  # pyright: ignore[reportUnknownArgumentType]
         return found
 
-    def _text(self, row: dict[str, object], key: str) -> str:
+    def _text(self, row: dict[str, object], key: str, *, allow_empty: bool = False) -> str:
+        """文字の欄。返事は記録に残っていないことがあるため、空を許す。"""
         value = row.get(key)
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str) or (not allow_empty and not value.strip()):
             raise CannotMeasure(f"{key} が文字で書かれていません")
         return value
 
