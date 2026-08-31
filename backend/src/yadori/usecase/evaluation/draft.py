@@ -5,44 +5,44 @@
 判定に渡すのは後の発話とその候補だけで、作業場所の発話を丸ごと渡さない。
 宿りは必要な記憶だけを渡すための道具であり、その周辺の道具も同じ前提で作る。
 
-新しく作るのは「前回が空の追記」であり、組を解く部品は一つしか持たない。
+新しく作るのは「前回が空の追記」であり、組を解く部品（`Resolving`）は一つしか持たない。
 書くのは最後の一段だけで、読み取りと判定の途中で失敗しても何も書かれない。
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import final
 
 from yadori.domain.evaluation import (
-    Added,
     Appended,
     Asking,
     BrokenRecord,
     CannotDraft,
-    CannotMeasure,
-    Case,
     Covered,
     Draft,
     Drafts,
     DrawnWith,
     Exchange,
     Judge,
-    Overlap,
     Pair,
-    RecallEval,
     Recorded,
     Records,
 )
 from yadori.domain.memory import Dweller, Embeddings, HowToRecall, Memories
 from yadori.usecase.conversation import Conversation
+from yadori.usecase.evaluation.resolve import (
+    EMPTY_PREVIOUS,
+    Placed,
+    Previous,
+    Resolved,
+    Resolving,
+    Where,
+)
 from yadori.usecase.evaluation.ticking import Ticking
 
-# リポジトリの評価セットと同じ。何位までに入れば満たしたとするか。
-WITHIN = 3
 # 下書き用の思い出し方。普段より下限を低く、件数を多く取り、候補を広めに引く。
 # 直近の往復数は普段と同じにし、直近が渡す範囲の前の発話は候補に入らない。
 DRAFT_HOW = HowToRecall(recent_turns=6, found_limit=10, relevance_floor=0.30)
@@ -50,68 +50,6 @@ DRAFT_HOW = HowToRecall(recent_turns=6, found_limit=10, relevance_floor=0.30)
 ASK_AT_MOST = 10
 DRAFTED = Dweller(id="drafted", owner="下書きのためだけの持ち主", name="下書き", nickname="下書き")
 NAME_DECLARED = "下書きのためだけの名乗り。応対は作らない。"
-
-
-@final
-@dataclass(frozen=True)
-class _Where:
-    """記録の中の居場所。作業場所と時刻は必ず一緒にある。"""
-
-    workspace: str
-    at: datetime
-
-
-@final
-@dataclass(frozen=True)
-class _Placed:
-    """解く並びの一つ。前回のやりとりは名前付き、新しい発話は名前無し。
-
-    作業場所と時刻は候補を引く記憶へ入れる順を決めるためで、前回のやりとりは記録の
-    読み直しから引く。記録に見つからない前回のやりとりは持たず、記憶に入らない。
-    """
-
-    name: str | None
-    utterance: str
-    reply: str
-    where: _Where | None
-
-    @property
-    def is_new(self) -> bool:
-        return self.name is None
-
-
-@final
-@dataclass(frozen=True)
-class _Previous:
-    """前回の下書き。新しく作るときは空で、番号は 0 から始まる。"""
-
-    exchanges: tuple[Exchange, ...]
-    cases: tuple[Case, ...]
-    last_exchange: int
-    last_case: int
-
-    @property
-    def utterances(self) -> frozenset[str]:
-        return frozenset(one.utterance for one in self.exchanges) | frozenset(
-            one.utterance for one in self.cases
-        )
-
-
-_EMPTY = _Previous(exchanges=(), cases=(), last_exchange=0, last_case=0)
-
-
-@final
-@dataclass(frozen=True)
-class _Resolved:
-    """組を解いた結果。合わせた評価セットと、今回足した分と、使った名前の最後の番号。
-
-    番号は下書きの中の名前からは求めない。人が名前を変えても消しても使い回さない。
-    """
-
-    recall_eval: RecallEval
-    added: Added
-    last_exchange: int
-    last_case: int
 
 
 @final
@@ -131,7 +69,7 @@ class Drafting:
         self._embeddings: Embeddings = embeddings
         self._fresh_memories: Callable[[], Memories] = fresh_memories
         self._how: HowToRecall = how
-        self._overlap: Overlap = Overlap()
+        self._resolving: Resolving = Resolving(how)
 
     def drawn_with(self) -> DrawnWith:
         """何で候補を引き、何で判定するか。画面と下書きの前回の範囲に残す。"""
@@ -152,8 +90,8 @@ class Drafting:
         """
         self._drafts.verify_writable(out)
         recorded, skipped = self._recorded(places)
-        incoming = self._incoming([one for _, one in recorded], _EMPTY)
-        resolved, _, _ = self._drawn(_EMPTY, recorded, incoming)
+        incoming = self._incoming([one for _, one in recorded], EMPTY_PREVIOUS)
+        resolved, _, _ = self._drawn(EMPTY_PREVIOUS, recorded, incoming)
         if not resolved.recall_eval.cases:
             raise CannotDraft("後の発話が前の話題を指す問が一つも出ませんでした")
         covered = self._covered(places, recorded, skipped, resolved)
@@ -177,7 +115,7 @@ class Drafting:
         """
         previous_eval, before = self._drafts.read(out)
         self._refuse_if_differs(before, places)
-        previous = _Previous(
+        previous = Previous(
             exchanges=previous_eval.exchanges,
             cases=previous_eval.cases,
             last_exchange=before.last_exchange,
@@ -255,7 +193,7 @@ class Drafting:
                     return None
         return None
 
-    def _incoming(self, recorded: Sequence[Recorded], previous: _Previous) -> list[Recorded]:
+    def _incoming(self, recorded: Sequence[Recorded], previous: Previous) -> list[Recorded]:
         """新しい発話。中身のあるものに絞り、同じ文言は最初の一つにし、前回の下書きにある文言を除く。
 
         測る側は文言で照合するため、同じ文言が二つあると指す先が定まらない。
@@ -275,20 +213,20 @@ class Drafting:
 
     def _drawn(
         self,
-        previous: _Previous,
+        previous: Previous,
         recorded: Sequence[tuple[Path, Recorded]],
         incoming: Sequence[Recorded],
-    ) -> tuple[_Resolved, int, int]:
+    ) -> tuple[Resolved, int, int]:
         placed = self._placed(previous, [one for _, one in recorded], incoming)
         askings = self._asked(placed)
         asked = len(askings)
         unasked = sum(1 for one in placed if one.is_new) - asked
         pairs = self._judged(placed, askings)
-        return self._resolved(previous, placed, pairs), asked, unasked
+        return self._resolving.resolve(previous, placed, pairs), asked, unasked
 
     def _placed(
-        self, previous: _Previous, recorded: Sequence[Recorded], incoming: Sequence[Recorded]
-    ) -> list[_Placed]:
+        self, previous: Previous, recorded: Sequence[Recorded], incoming: Sequence[Recorded]
+    ) -> list[Placed]:
         """解く並び。前回のやりとり（下書きの順）の後に、新しい発話を時刻の順で置く。
 
         前回のやりとりの作業場所と時刻は、記録の同じ文言の一往復（最初の一つ）から引く。
@@ -302,25 +240,25 @@ class Drafting:
             for exchange in previous.exchanges
         ]
         placed.extend(
-            _Placed(
+            Placed(
                 name=None,
                 utterance=one.utterance,
                 reply=one.reply,
-                where=_Where(one.workspace, one.at),
+                where=Where(one.workspace, one.at),
             )
             for one in incoming
         )
         return placed
 
-    def _placed_previous(self, exchange: Exchange, found: Recorded | None) -> _Placed:
-        return _Placed(
+    def _placed_previous(self, exchange: Exchange, found: Recorded | None) -> Placed:
+        return Placed(
             name=exchange.name,
             utterance=exchange.utterance,
             reply=exchange.reply,
-            where=None if found is None else _Where(found.workspace, found.at),
+            where=None if found is None else Where(found.workspace, found.at),
         )
 
-    def _asked(self, placed: Sequence[_Placed]) -> list[tuple[int, Asking]]:
+    def _asked(self, placed: Sequence[Placed]) -> list[tuple[int, Asking]]:
         """作業場所ごとに使い捨ての記憶を組み、時刻の順に、思い出してから覚える。
 
         問いにするのは候補のある新しい発話だけ。前回のやりとりは覚えさせるだけで問いにしない。
@@ -347,7 +285,7 @@ class Drafting:
         _ = memories.write_identity(DRAFTED.id, NAME_DECLARED)
         return Conversation(memories, self._embeddings, Ticking(), self._how)
 
-    def _by_workspace(self, placed: Sequence[_Placed]) -> list[list[int]]:
+    def _by_workspace(self, placed: Sequence[Placed]) -> list[list[int]]:
         """作業場所ごとの、時刻の順の番号。記録に見つからなかった前回のやりとりは入らない。"""
         grouped: dict[str, list[tuple[datetime, int]]] = {}
         for index, one in enumerate(placed):
@@ -356,7 +294,7 @@ class Drafting:
         return [[index for _, index in sorted(indexes)] for indexes in grouped.values()]
 
     def _judged(
-        self, placed: Sequence[_Placed], askings: Sequence[tuple[int, Asking]]
+        self, placed: Sequence[Placed], askings: Sequence[tuple[int, Asking]]
     ) -> list[Pair]:
         """問いをいくつかずつ判定に渡し、組の番号を全体の並びの番号へ直す。"""
         position = {one.utterance: index for index, one in enumerate(placed)}
@@ -370,104 +308,6 @@ class Drafting:
                 )
         return pairs
 
-    def _resolved(
-        self, previous: _Previous, placed: Sequence[_Placed], pairs: Sequence[Pair]
-    ) -> _Resolved:
-        """判定の結果を、測れる評価セットの形へ解く。
-
-        - 同じ後の発話の組は、期待を複数持つ一問にまとめる
-        - 問と期待の両方になる発話は期待に残し、問にしない
-        - 問を外した後に残る並びの末尾の直近に入る期待は外す（数える並びは戻す前のもの）
-        - 期待が一つも残らない発話は問にせず、覚えさせる側に戻す
-        - 名前は前回の最後の番号の次から付け、合わせた評価セットで指す先を確かめる
-        """
-        expected_of = self._kept_as_expected(self._merged(pairs))
-        exchange_indexes = [index for index in range(len(placed)) if index not in expected_of]
-        recent = (
-            set(exchange_indexes[-self._how.recent_turns :])
-            if self._how.recent_turns
-            else set[int]()
-        )
-        case_of: dict[int, list[int]] = {}
-        for later in sorted(expected_of):
-            earliers = [earlier for earlier in expected_of[later] if earlier not in recent]
-            if earliers:
-                case_of[later] = earliers
-        exchange_indexes = [index for index in range(len(placed)) if index not in case_of]
-        names = self._named(placed, exchange_indexes, previous.last_exchange)
-        new_exchanges = tuple(
-            Exchange(
-                name=names[index], utterance=placed[index].utterance, reply=placed[index].reply
-            )
-            for index in exchange_indexes
-            if placed[index].is_new
-        )
-        new_cases = tuple(
-            self._case(placed, later, earliers, names, previous.last_case + number)
-            for number, (later, earliers) in enumerate(sorted(case_of.items()), start=1)
-        )
-        recall_eval = RecallEval(
-            within=WITHIN,
-            exchanges=previous.exchanges + new_exchanges,
-            cases=previous.cases + new_cases,
-        )
-        try:
-            recall_eval.verify_pointing()
-        except CannotMeasure as broken:
-            raise CannotDraft(f"下書きが測れる形になりません: {broken}") from broken
-        return _Resolved(
-            recall_eval=recall_eval,
-            added=Added(exchanges=new_exchanges, cases=new_cases),
-            last_exchange=previous.last_exchange + len(new_exchanges),
-            last_case=previous.last_case + len(new_cases),
-        )
-
-    def _named(
-        self, placed: Sequence[_Placed], exchange_indexes: Sequence[int], last_exchange: int
-    ) -> dict[int, str]:
-        names: dict[int, str] = {}
-        number = last_exchange
-        for index in exchange_indexes:
-            name = placed[index].name
-            if name is None:
-                number += 1
-                name = f"e{number:03d}"
-            names[index] = name
-        return names
-
-    def _merged(self, pairs: Sequence[Pair]) -> dict[int, list[int]]:
-        merged: dict[int, list[int]] = {}
-        for pair in pairs:
-            earliers = merged.setdefault(pair.later, [])
-            if pair.earlier not in earliers:
-                earliers.append(pair.earlier)
-        return merged
-
-    def _kept_as_expected(self, expected_of: dict[int, list[int]]) -> dict[int, list[int]]:
-        pointed = {earlier for earliers in expected_of.values() for earlier in earliers}
-        return {later: earliers for later, earliers in expected_of.items() if later not in pointed}
-
-    def _case(
-        self,
-        placed: Sequence[_Placed],
-        later: int,
-        earliers: Sequence[int],
-        names: dict[int, str],
-        number: int,
-    ) -> Case:
-        utterance = placed[later].utterance
-        return Case(
-            name=f"c{number:03d}",
-            utterance=utterance,
-            expected=tuple(names[earlier] for earlier in earliers),
-            forbidden=(),
-            confirmed=False,
-            overlap=tuple(
-                (names[earlier], self._overlap.between(utterance, placed[earlier].utterance))
-                for earlier in earliers
-            ),
-        )
-
     # 前回の範囲
 
     def _covered(
@@ -475,7 +315,7 @@ class Drafting:
         places: Sequence[Path],
         recorded: Sequence[tuple[Path, Recorded]],
         skipped: tuple[str, ...],
-        resolved: _Resolved,
+        resolved: Resolved,
     ) -> Covered:
         """次の追記が読む印。今回読み直した全記録から求める。
 
