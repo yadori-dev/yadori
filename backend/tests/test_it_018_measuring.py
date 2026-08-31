@@ -33,7 +33,7 @@ CASES = (
 )
 RECALL_EVAL = RecallEval(within=3, exchanges=EXCHANGES, cases=CASES)
 
-# 下限を締めた条件と緩めた条件。緩めると一件が良くなり、別の一件が悪くなる。
+# 下限を締めた条件と緩めた条件。緩めると一問が良くなり、別の一問が悪くなる。
 TIGHT = HowToRecall(recent_turns=4, found_limit=5, relevance_floor=0.30)
 LOOSE = HowToRecall(recent_turns=4, found_limit=5, relevance_floor=0.20)
 
@@ -78,9 +78,9 @@ class TestMeasuring:
         assert owned.retrieval(1).count == 0
         owned.close()
 
-    # IT-018-002 要約が件ごとの結果と一致し、差を名指しできる
+    # IT-018-002 要約が問ごとの結果と一致し、差を名指しできる
 
-    def test_IT_018_002_要約が件ごとの結果と一致する(self) -> None:
+    def test_IT_018_002_要約が問ごとの結果と一致する(self) -> None:
         measured = self._measuring().at(LOOSE)
 
         assert measured.total == len(CASES)
@@ -93,7 +93,7 @@ class TestMeasuring:
             if any(one.rank is not None for one in outcome.forbidden)
         )
 
-    def test_IT_018_002_良くなった件と悪くなった件を名指しし変わらない件は出さない(self) -> None:
+    def test_IT_018_002_良くなった問と悪くなった問を名指しし変わらない問は出さない(self) -> None:
         measuring = self._measuring()
 
         difference = Comparing(measuring.at(TIGHT), measuring.at(LOOSE)).difference()
@@ -103,18 +103,18 @@ class TestMeasuring:
         named = {shifted.case for shifted in difference.better + difference.worse}
         assert "変わらない" not in named
 
-    def test_IT_018_002_全体では良くなっても悪くなった件が消えない(self) -> None:
+    def test_IT_018_002_全体では良くなっても悪くなった問が消えない(self) -> None:
         measuring = self._measuring()
         before = measuring.at(TIGHT)
         after = measuring.at(LOOSE)
 
         difference = Comparing(before, after).difference()
 
-        # 満たした件の数は変わらないが、中身は入れ替わっている。
+        # 満たした問の数は変わらないが、中身は入れ替わっている。
         assert before.met == after.met
         assert difference.worse != ()
 
-    # IT-018-003 欠けていれば一件も測らない
+    # IT-018-003 欠けていれば一問も測らない
 
     def test_IT_018_003_無いやりとりを指すと測らない(self) -> None:
         broken = RecallEval(
@@ -136,7 +136,7 @@ class TestMeasuring:
         with pytest.raises(CannotMeasure, match="期待と禁止に指している"):
             _ = self._measuring(broken).at(TIGHT)
 
-    def test_IT_018_003_期待が直近に入った件は満たさずではなく測れずになる(self) -> None:
+    def test_IT_018_003_期待が直近に入った問は満たさずではなく測れずになる(self) -> None:
         # 直近を広げると tomato が直近へ入り、意味で探す側に現れなくなる。
         wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
 
@@ -146,11 +146,11 @@ class TestMeasuring:
         assert not drawn.measurable
         assert drawn.in_recent == ("tomato",)
         assert not drawn.met(measured.within)
-        # 測れない件は、満たした数の母数からも外れる。
+        # 測れない問は、満たした数の母数からも外れる。
         assert measured.total == len(CASES) - 1
         assert measured.unmeasurable == 1
 
-    def test_IT_018_003_測れない件は差に入れない(self) -> None:
+    def test_IT_018_003_測れない問は差に入れない(self) -> None:
         measuring = self._measuring()
         wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
 

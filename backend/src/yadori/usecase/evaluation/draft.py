@@ -86,7 +86,7 @@ class Drafting:
         pairs = self._judged(unique, askings)
         recall_eval = self._resolved(unique, pairs)
         if not recall_eval.cases:
-            raise CannotDraft("後の発話が前の話題を指す件が一つも出ませんでした")
+            raise CannotDraft("後の発話が前の話題を指す問が一つも出ませんでした")
         recall_eval.verify_pointing()
         self._writer.write(out, recall_eval, self.drawn_with())
         return Draft(
@@ -189,10 +189,10 @@ class Drafting:
     def _resolved(self, recorded: Sequence[Recorded], pairs: Sequence[Pair]) -> RecallEval:
         """判定の結果を、測れる評価セットの形へ解く。
 
-        - 同じ後の発話の組は、期待を複数持つ一件にまとめる
-        - 件と期待の両方になる発話は期待に残し、件にしない
-        - 件を外した後に残る並びの末尾の直近に入る期待は外す
-        - 期待が一つも残らない件は出さない
+        - 同じ後の発話の組は、期待を複数持つ一問にまとめる
+        - 問と期待の両方になる発話は期待に残し、問にしない
+        - 問を外した後に残る並びの末尾の直近に入る期待は外す
+        - 期待が一つも残らない問は出さない
         """
         expected_of = self._merged(pairs)
         expected_of = self._kept_as_expected(expected_of)

@@ -41,13 +41,13 @@ class Measuring:
         )
 
     def at(self, how: HowToRecall) -> Measurement:
-        """その条件で全件を測る。
+        """その条件で全問を測る。
 
         - 指す先が揃っているか確かめる
-        - 確認前の件が無いか確かめる
+        - 確認前の問が無いか確かめる
         - 使い捨ての記憶へやりとりを入れる
         - インデックスが揃っているか確かめる
-        - 件ごとに思い出して順位を取る
+        - 問ごとに思い出して順位を取る
         """
         self._check_pointing()
         self._check_confirmed()
@@ -60,19 +60,19 @@ class Measuring:
         )
 
     def _check_pointing(self) -> None:
-        """件が指すやりとりが評価セットの中に在り、名前が重なっていないことを確かめる。"""
+        """問が指すやりとりが評価セットの中に在り、名前が重なっていないことを確かめる。"""
         self._eval.verify_pointing()
 
     def _check_confirmed(self) -> None:
-        """人が確かめていない件が無いことを確かめる。
+        """人が確かめていない問が無いことを確かめる。
 
-        下書きから作った件は確認前の印を持つ。確かめていない期待を測ると、
+        下書きから作った問は確認前の印を持つ。確かめていない期待を測ると、
         判定した側の癖がそのまま思い出す質の値になる。
         """
         if self._eval.unconfirmed:
             raise CannotMeasure(
-                f"確認していない件が {self._eval.unconfirmed} 件あります。"
-                + "各件を読み、残す件は confirmed = true にしてください"
+                f"確認していない問が {self._eval.unconfirmed} 問あります。"
+                + "各問を読み、残す問は confirmed = true にしてください"
             )
 
     def _filled(self) -> Memories:
@@ -96,10 +96,10 @@ class Measuring:
             raise CannotMeasure(f"インデックスを持たないやりとりがある: {len(missing)}件")
 
     def _outcome(self, conversation: Conversation, case: Case) -> Outcome:
-        """一件を測る。探した記憶だけを見る。直近は数えない。
+        """一問を測る。探した記憶だけを見る。直近は数えない。
 
-        期待するやりとりが直近として渡っていたら、その件は測れない。満たさ
-        なかった件と混ぜない。
+        期待するやりとりが直近として渡っていたら、その問は測れない。満たさ
+        なかった問と混ぜない。
         """
         recollected = conversation.recall(MEASURED.id, case.utterance)
         found = recollected.found

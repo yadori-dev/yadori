@@ -271,11 +271,11 @@ class TestIT030004:
             [Case("c", A2, ("a",), ())], (Exchange("a", A, "はい"), Exchange("a", D, "はい"))
         )
 
-        with pytest.raises(CannotMeasure, match="確認していない件が 1 件"):
+        with pytest.raises(CannotMeasure, match="確認していない問が 1 問"):
             self._measure(unconfirmed)
         with pytest.raises(CannotMeasure, match="無いやりとりを指している"):
             self._measure(unknown)
-        with pytest.raises(CannotMeasure, match="件の名前が重なっている"):
+        with pytest.raises(CannotMeasure, match="問の名前が重なっている"):
             self._measure(same_case)
         with pytest.raises(CannotMeasure, match="やりとりの名前が重なっている"):
             self._measure(same_exchange)
@@ -395,10 +395,10 @@ class TestIT030006:
         assert code == 0 and len(lines) == 6
         assert lines[0].startswith("候補を引いた 埋め込み: character-pairs-v1 / 条件: ")
         assert "記録: 2 セッション、中身のある発話 13 件（読めず飛ばしたファイル 0）" in lines[1]
-        assert "覚えさせる発話: 12 件" in lines[2] and "件: 1 件" in lines[3]
+        assert "覚えさせる発話: 12 件" in lines[2] and "問: 1 問" in lines[3]
         assert "手で足せます" in lines[5]
         assert missing == 1 and "下書きを作れません" in errors.getvalue()
-        assert zero == 1 and "件が一つも出ませんでした" in errors.getvalue()
+        assert zero == 1 and "問が一つも出ませんでした" in errors.getvalue()
         assert not (tmp_path / "zero.toml").exists()
         assert no_out == 1 and unknown == 1
         assert USAGE in errors.getvalue()

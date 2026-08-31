@@ -16,7 +16,7 @@ from yadori.domain.evaluation.failures import CannotMeasure
 @final
 @dataclass(frozen=True)
 class Exchange:
-    """評価セットで、あらかじめ覚えさせる一往復。名前で件から指す。"""
+    """評価セットで、あらかじめ覚えさせる一往復。名前で問から指す。"""
 
     name: str
     utterance: str
@@ -28,9 +28,9 @@ class Exchange:
 class Case:
     """一つの発話と、そのとき出るべきやりとり・出てはいけないやりとり。
 
-    確認済みかどうかは、下書きから作った件だけが持つ。欄が無ければ（None）
-    人が書いた件であり、確認済みとして扱う。語の重なりの度合いは、期待ごとに
-    人が言い換えの件を見つける手掛かりで、測る側は読まない。
+    確認済みかどうかは、下書きから作った問だけが持つ。欄が無ければ（None）
+    人が書いた問であり、確認済みとして扱う。語の重なりの度合いは、期待ごとに
+    人が言い換えの問を見つける手掛かりで、測る側は読まない。
     """
 
     name: str
@@ -48,7 +48,7 @@ class Case:
 @final
 @dataclass(frozen=True)
 class RecallEval:
-    """評価セット。覚えさせるやりとりと、測る件を持つ。"""
+    """評価セット。覚えさせるやりとりと、測る問を持つ。"""
 
     within: int
     exchanges: tuple[Exchange, ...]
@@ -65,17 +65,17 @@ class RecallEval:
         for case in self.cases:
             unknown = sorted((set(case.expected) | set(case.forbidden)) - known)
             if unknown:
-                raise CannotMeasure(f"件「{case.name}」が無いやりとりを指している: {unknown}")
+                raise CannotMeasure(f"問「{case.name}」が無いやりとりを指している: {unknown}")
             both = sorted(set(case.expected) & set(case.forbidden))
             if both:
                 raise CannotMeasure(
-                    f"件「{case.name}」が同じやりとりを期待と禁止に指している: {both}"
+                    f"問「{case.name}」が同じやりとりを期待と禁止に指している: {both}"
                 )
 
     def _verify_unique_names(self) -> None:
         for kind, names in (
             ("やりとり", [exchange.name for exchange in self.exchanges]),
-            ("件", [case.name for case in self.cases]),
+            ("問", [case.name for case in self.cases]),
         ):
             repeated = sorted({name for name in names if names.count(name) > 1})
             if repeated:
@@ -105,10 +105,10 @@ class Ranked:
 @final
 @dataclass(frozen=True)
 class Outcome:
-    """一件を測った結果。
+    """一問を測った結果。
 
-    期待するやりとりが直近として渡っていた件は測れない。意味で探す側に現れ
-    ないためである。満たさなかった件と混ぜると、直近の往復数を狭めただけで
+    期待するやりとりが直近として渡っていた問は測れない。意味で探す側に現れ
+    ないためである。満たさなかった問と混ぜると、直近の往復数を狭めただけで
     良くなったように見える。
     """
 
@@ -137,7 +137,7 @@ class Outcome:
 @final
 @dataclass(frozen=True)
 class Measurement:
-    """全件の結果。要約はここから求め、別に持たない。"""
+    """全問の結果。要約はここから求め、別に持たない。"""
 
     within: int
     outcomes: tuple[Outcome, ...]
@@ -156,7 +156,7 @@ class Measurement:
 
     @property
     def intruded(self) -> int:
-        """出てはいけないやりとりが出た件の数。"""
+        """出てはいけないやりとりが出た問の数。"""
         return sum(
             1 for outcome in self.outcomes if any(one.rank is not None for one in outcome.forbidden)
         )
@@ -165,7 +165,7 @@ class Measurement:
 @final
 @dataclass(frozen=True)
 class Shifted:
-    """一件が、二つの測定の間でどう動いたか。"""
+    """一問が、二つの測定の間でどう動いたか。"""
 
     case: str
     before: Outcome
@@ -175,7 +175,7 @@ class Shifted:
 @final
 @dataclass(frozen=True)
 class Difference:
-    """二つの測定の差。変わらなかった件は持たない。"""
+    """二つの測定の差。変わらなかった問は持たない。"""
 
     better: tuple[Shifted, ...]
     worse: tuple[Shifted, ...]
@@ -223,7 +223,7 @@ class Recorded:
         """短い相槌や指す語だけの発話ではないか。
 
         指す語を取り除いても、まだ語として読める長さが残るものを中身があるとする。
-        指す語だけの発話は意味で探しても出ないため、件にすると必ず満たさない。
+        指す語だけの発話は意味で探しても出ないため、問にすると必ず満たさない。
         長すぎる発話は貼り付けた資料であり、話した言葉ではないので除く。
         """
         if len(self.utterance) > _SPOKEN_AT_MOST:
@@ -259,7 +259,7 @@ class Pair:
 class Overlap:
     """語の重なりの度合い。隣り合う文字二つの並びをどれだけ共有するか。
 
-    人が言い換えの件を見つける手掛かりであり、判定にも測る側にも使わない。
+    人が言い換えの問を見つける手掛かりであり、判定にも測る側にも使わない。
     インデックスを作る文字の埋め込みは差し替えの対象なので、ここでは縛らない。
     """
 
@@ -279,7 +279,7 @@ class Overlap:
 class Draft:
     """下書き。記録から作った評価セットと、何を取り出したかの数。
 
-    下書きの件はすべて確認前なので、確認が要る数は件の数と同じで別に持たない。
+    下書きの問はすべて確認前なので、確認が要る数は問の数と同じで別に持たない。
     """
 
     recall_eval: RecallEval
