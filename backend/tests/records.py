@@ -15,8 +15,9 @@ from typing import final
 from yadori.domain.evaluation import Asking, CannotDraft, Pair
 from yadori.domain.memory import HowToRecall
 
-WORKSPACE = "/home/someone/work/garden"
-OTHER_WORKSPACE = "/home/someone/work/office"
+# 架空の作業場所。機密の検査が /home/<名前>/ の形を止めるため、その形を避ける。
+WORKSPACE = "/work/garden"
+OTHER_WORKSPACE = "/work/office"
 START = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
 
 

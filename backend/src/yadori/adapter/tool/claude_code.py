@@ -19,15 +19,11 @@ WITHOUT_ITS_OWN_CONTEXT = ["--restricted", "--strict-mcp-config", "--tools", ""]
 
 
 class ToolCallFailed(Exception):
-    """道具を呼べなかった、または返事を読めなかった。呼ぶ側が自分の失敗へ言い換える。"""
+    """道具を呼べなかった、または返事を読めなかった。呼ぶ側が自分の失敗へ言い換える。
 
-
-class TooLongForTool(ToolCallFailed):
-    """渡した文章が道具の受け付ける大きさを超えた。渡す量を減らせば通る。"""
-
-
-class ToolLimitReached(ToolCallFailed):
-    """利用の上限に当たった。時間を置くか、契約を確かめる。"""
+    理由の文に、大きすぎ・上限・それ以外の区別を言葉で含める。型では分けない。
+    分けて捕まえる側が今は無い。
+    """
 
 
 TOO_LONG_SIGNS = ("prompt is too long", "too long", "context length")
@@ -39,13 +35,16 @@ class ClaudeCodeCall:
     def __init__(self, model: str, wait_seconds: int) -> None:
         self._model: str = model
         self._wait_seconds: int = wait_seconds
-        self._empty_dir: str | None = None
 
     def ask(self, preface: str, spoken: str) -> str:
         """前置きと文章を渡し、返事の文章だけを受け取る。"""
         return self._as_reply(self._run(preface, spoken))
 
     def _run(self, preface: str, spoken: str) -> str:
+        with tempfile.TemporaryDirectory(prefix="yadori-call-") as nowhere:
+            return self._run_in(nowhere, preface, spoken)
+
+    def _run_in(self, nowhere: str, preface: str, spoken: str) -> str:
         try:
             # 文章は標準入力で渡す。引数で渡すと、長い並びで OS の上限に当たる。
             done = subprocess.run(
@@ -66,8 +65,8 @@ class ClaudeCodeCall:
                 timeout=self._wait_seconds,
                 check=False,
                 # 作業ディレクトリの状態（変更したファイルの一覧など）が文脈として混ざるため、
-                # 何も無い一時ディレクトリで呼ぶ。
-                cwd=self._nowhere(),
+                # 何も無い一時ディレクトリで呼ぶ。呼び終えたら消す。
+                cwd=nowhere,
             )
         except (OSError, subprocess.TimeoutExpired) as trouble:
             raise ToolCallFailed(f"対話する道具を呼べなかった: {trouble}") from trouble
@@ -75,9 +74,9 @@ class ClaudeCodeCall:
             reason = self._reason(done)
             lowered = reason.lower()
             if any(sign in lowered for sign in TOO_LONG_SIGNS):
-                raise TooLongForTool(f"対話する道具が受け付けない大きさだった: {reason}")
+                raise ToolCallFailed(f"対話する道具が受け付けない大きさだった: {reason}")
             if any(sign in lowered for sign in LIMIT_SIGNS):
-                raise ToolLimitReached(f"対話する道具の利用の上限に当たった: {reason}")
+                raise ToolCallFailed(f"対話する道具の利用の上限に当たった: {reason}")
             raise ToolCallFailed(f"対話する道具が失敗した: {reason}")
         return done.stdout
 
@@ -94,11 +93,6 @@ class ClaudeCodeCall:
             if isinstance(result, str) and result.strip():
                 return result.strip()[:300]
         return done.stdout.strip()[:300]
-
-    def _nowhere(self) -> str:
-        if self._empty_dir is None:
-            self._empty_dir = tempfile.mkdtemp(prefix="yadori-call-")
-        return self._empty_dir
 
     def _as_reply(self, written: str) -> str:
         """道具の返した記録から、返事の文章だけを取り出す。"""

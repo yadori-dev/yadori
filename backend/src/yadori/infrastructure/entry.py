@@ -52,6 +52,7 @@ class Entry:
 
         - 引数が無ければ話す
         - measure なら測る
+        - evals draft なら記録から評価セットの下書きを作る
         - それ以外は使い方を書く
         """
         if not self._argv:

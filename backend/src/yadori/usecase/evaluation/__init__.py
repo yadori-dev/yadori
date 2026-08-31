@@ -5,7 +5,7 @@
 """
 
 from yadori.usecase.evaluation.compare import Comparing
-from yadori.usecase.evaluation.draft import Drafting
+from yadori.usecase.evaluation.draft import DRAFT_HOW, Drafting
 from yadori.usecase.evaluation.measure import Measuring
 
-__all__ = ["Comparing", "Drafting", "Measuring"]
+__all__ = ["DRAFT_HOW", "Comparing", "Drafting", "Measuring"]

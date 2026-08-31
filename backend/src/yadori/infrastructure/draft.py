@@ -18,7 +18,7 @@ from yadori.adapter.tool import ClaudeCodeCall
 from yadori.domain.evaluation import CannotDraft, Judge
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall
 from yadori.infrastructure.settings import DEFAULT_MODEL, SettingsFile
-from yadori.usecase.evaluation import Drafting
+from yadori.usecase.evaluation import DRAFT_HOW, Drafting
 
 # 判定は問いを十ずつ渡すので小さいが、回数が多い。応対と同じ待ち時間で足りる。
 JUDGE_WAIT_SECONDS = 180
@@ -39,13 +39,14 @@ class Drafter:
     ) -> None:
         self._places: tuple[Path, ...] = tuple(places)
         self._out: Path = out
+        # 宿りの設定（dweller.toml）が無くても下書きは作れるように、既定の模型で呼ぶ。
         self._judge: Judge = judge or ClaudeCodeJudge(
             ClaudeCodeCall(DEFAULT_MODEL, JUDGE_WAIT_SECONDS)
         )
         self._embeddings: Embeddings = embeddings or Multilingual(
             cache_dir=SettingsFile().models_path
         )
-        self._how: HowToRecall | None = how
+        self._how: HowToRecall = how or DRAFT_HOW
         self._writing: TextIO = writing or sys.stdout
 
     def run(self) -> int:
@@ -56,7 +57,7 @@ class Drafter:
             DraftFile(),
             self._embeddings,
             InMemoryMemories,
-            **({} if self._how is None else {"how": self._how}),
+            self._how,
         )
         try:
             draft = drafting.run(self._places, self._out)

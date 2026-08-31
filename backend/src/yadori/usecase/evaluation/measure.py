@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
 from typing import final
 
 from yadori.domain.evaluation import (
@@ -20,6 +19,7 @@ from yadori.domain.evaluation import (
 )
 from yadori.domain.memory import Dweller, Embeddings, Found, HowToRecall, Memories
 from yadori.usecase.conversation import Conversation
+from yadori.usecase.evaluation.ticking import Ticking
 
 MEASURED = Dweller(id="measured", owner="測るためだけの持ち主", name="測り手", nickname="測り手")
 NAME_DECLARED = "測るためだけの名乗り。応対は作らない。"
@@ -125,16 +125,6 @@ class Measuring:
                 return exchange.utterance
         raise CannotMeasure(f"やりとり「{name}」が評価セットに無い")
 
-    def _clock(self) -> _Ticking:
+    def _clock(self) -> Ticking:
         """測るたびに同じ時刻から進める。結果を時刻に左右させない。"""
-        return _Ticking()
-
-
-@final
-class _Ticking:
-    def __init__(self) -> None:
-        self._at: datetime = datetime(2000, 1, 1, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        self._at += timedelta(minutes=1)
-        return self._at
+        return Ticking()

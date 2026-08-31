@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import final
 
@@ -32,6 +31,7 @@ from yadori.domain.evaluation import (
 )
 from yadori.domain.memory import Dweller, Embeddings, HowToRecall, Memories
 from yadori.usecase.conversation import Conversation
+from yadori.usecase.evaluation.ticking import Ticking
 
 # リポジトリの評価セットと同じ。何位までに入れば満たしたとするか。
 WITHIN = 3
@@ -159,7 +159,7 @@ class Drafting:
         memories = self._fresh_memories()
         memories.settle(DRAFTED)
         _ = memories.write_identity(DRAFTED.id, NAME_DECLARED)
-        return Conversation(memories, self._embeddings, _Ticking(), self._how)
+        return Conversation(memories, self._embeddings, Ticking(), self._how)
 
     def _by_workspace(self, recorded: Sequence[Recorded]) -> list[list[int]]:
         grouped: dict[str, list[int]] = {}
@@ -248,15 +248,3 @@ class Drafting:
                 for earlier in earliers
             ),
         )
-
-
-@final
-class _Ticking:
-    """使い捨ての記憶の時刻。結果を実際の時刻に左右させない。"""
-
-    def __init__(self) -> None:
-        self._at: datetime = datetime(2000, 1, 1, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        self._at += timedelta(minutes=1)
-        return self._at

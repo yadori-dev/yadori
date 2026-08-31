@@ -449,6 +449,15 @@ class _Unavailable:
 
 
 class TestST030008:
+    def test_ST_030_008_件が一つも出なければ何も書かず理由が返る(self, tmp_path: Path) -> None:
+        out = _out(tmp_path)
+
+        code, written, errors = _draft(_place(tmp_path), out, FixedJudge({}))
+
+        assert code == 1 and written == ""
+        assert "件が一つも出ませんでした" in errors
+        assert not out.exists()
+
     def test_ST_030_008_判定が続かなければ何も書かず理由が返る(self, tmp_path: Path) -> None:
         # 失敗の種類ごとの言い分けは、判定の実装に当てる IT-030-007 が確かめる。
         out = _out(tmp_path)

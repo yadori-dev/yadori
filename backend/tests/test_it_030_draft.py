@@ -34,7 +34,7 @@ from yadori.adapter.evaluation import (
     EvalFile,
 )
 from yadori.adapter.store import InMemoryMemories
-from yadori.adapter.tool import ToolCallFailed, ToolLimitReached, TooLongForTool
+from yadori.adapter.tool import ClaudeCodeCall, ToolCallFailed
 from yadori.domain.evaluation import (
     Asking,
     CannotDraft,
@@ -440,8 +440,8 @@ class TestIT030007:
             '[{"q": 9, "same": [1]}]',
             "組は無いと思います",
             ToolCallFailed("対話する道具を呼べなかった"),
-            ToolLimitReached("利用の上限に当たった"),
-            TooLongForTool("受け付けない大きさだった"),
+            ToolCallFailed("対話する道具の利用の上限に当たった"),
+            ToolCallFailed("対話する道具が受け付けない大きさだった"),
         ]
         for answer in bad_answers:
             with pytest.raises(CannotDraft):
@@ -449,3 +449,64 @@ class TestIT030007:
         # こちら側の不具合は言い換えずに伝わる。
         with pytest.raises(RuntimeError):
             _ = ClaudeCodeJudge(_RecordingCall(RuntimeError("こわれた"))).pairs(self.ASKINGS)
+
+
+@final
+class _Done:
+    def __init__(self, returncode: int, stdout: str, stderr: str) -> None:
+        self.returncode: int = returncode
+        self.stdout: str = stdout
+        self.stderr: str = stderr
+
+
+@final
+class _Seen:
+    def __init__(self) -> None:
+        self.args: list[str] = []
+        self.input: str = ""
+        self.cwd: str = ""
+
+
+class TestIT030007Tool:
+    """道具の呼び出しの部品。subprocess は I/O 境界なので差し替える。"""
+
+    def _call(self, monkeypatch: pytest.MonkeyPatch, done: _Done) -> tuple[ClaudeCodeCall, _Seen]:
+        seen = _Seen()
+
+        def fake_run(args: list[str], *, input: str, cwd: str, **kwargs: object) -> _Done:
+            del kwargs
+            seen.args, seen.input, seen.cwd = args, input, cwd
+            return done
+
+        monkeypatch.setattr("yadori.adapter.tool.claude_code.subprocess.run", fake_run)
+        return ClaudeCodeCall("opus", 10), seen
+
+    def test_IT_030_007_道具は標準入力で文章を受け取り返事の文章だけを返す(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        call, seen = self._call(monkeypatch, _Done(0, '{"result": "はい", "is_error": false}', ""))
+
+        answered = call.ask("前置き", "長い文章 " * 1000)
+
+        assert answered == "はい"
+        assert "長い文章" not in " ".join(seen.args)  # 引数ではなく標準入力で渡す
+        assert seen.input.startswith("長い文章")
+        assert seen.cwd and not Path(seen.cwd).exists()  # 空の一時ディレクトリは呼び終えたら消える
+
+    @pytest.mark.parametrize(
+        ("done", "words"),
+        [
+            (_Done(1, "", "Error: usage limit reached"), "上限"),
+            (_Done(1, '{"result": "Prompt is too long", "is_error": true}', ""), "大きさ"),
+            (_Done(1, "", ""), "終了状態 1"),
+            (_Done(0, "これは JSON ではない", ""), "読めなかった"),
+            (_Done(0, '{"result": ""}', ""), "空だった"),
+        ],
+    )
+    def test_IT_030_007_道具の失敗は理由を言葉で分けて伝わる(
+        self, monkeypatch: pytest.MonkeyPatch, done: _Done, words: str
+    ) -> None:
+        call, _ = self._call(monkeypatch, done)
+
+        with pytest.raises(ToolCallFailed, match=words):
+            _ = call.ask("前置き", "文章")
