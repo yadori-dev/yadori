@@ -573,6 +573,7 @@ class TestIT037005:
         assert [one.name for one in loaded.cases] == ["c001", "c002"]
         assert loaded.cases[0].confirmed is True and loaded.cases[1].expected == ("ピアノの話",)
         assert "# 注釈" in after and '"ピアノの話" = 0.4' in after
+        assert "# 触らない" not in after  # 見出しの行の注釈は残らない（注記に書いてある）
 
     def test_IT_037_005_途中で落ちても元が残り問ゼロの前回を読め境界を守る(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -604,6 +605,19 @@ class TestIT037005:
         (repo / ".git").mkdir(parents=True)
         inside = repo / "d.toml"
         _ = inside.write_text(before, encoding="utf-8")
+        # 境界と見出しの探し方は読む段で確かめ、判定を呼ぶ前に断る。
+        with pytest.raises(CannotDraft, match="リポジトリの配下"):
+            _ = DraftFile().read(inside)
+        inline = tmp_path / "inline.toml"
+        _ = inline.write_text(
+            "within = 3\ncovered = { until = 2026-01-01T09:00:00+00:00, places = [], skipped = [], "
+            + 'sessions = 1, last_exchange = 1, last_case = 0, drawn_with = { tool = "t", '
+            + 'tool_version = "v", recent = 2, limit = 10, floor = 0.15, judge = "j" } }\n'
+            + '\n[[exchange]]\nname = "a"\nutterance = "x"\nreply = "y"\n',
+            encoding="utf-8",
+        )
+        with pytest.raises(CannotDraft, match="前回の範囲を持たない"):
+            _ = DraftFile().read(inline)
         hand = tmp_path / "hand.toml"
         _ = hand.write_text("within = 3\n", encoding="utf-8")
         for bad, reason in (
