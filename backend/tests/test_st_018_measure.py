@@ -75,7 +75,7 @@ forbidden = ["train"]
 
 # 語の重なりを見る埋め込みに合う条件。既定は埋め込みごとに違うため固定する。
 BASELINE = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.21)
-# 締めると、引ける件が出なくなり、混ざる件の混入が消える。
+# 締めると、引ける問が出なくなり、混ざる問の混入が消える。
 TIGHTER = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.35)
 
 
@@ -97,26 +97,26 @@ class TestMeasure:
         _ = path.write_text(body, encoding="utf-8")
         return path
 
-    # ST-018-001 件ごとの順位と近さが読める
+    # ST-018-001 問ごとの順位と近さが読める
 
-    def test_ST_018_001_件ごとの結果と要約が出る(self, tmp_path: Path) -> None:
+    def test_ST_018_001_問ごとの結果と要約が出る(self, tmp_path: Path) -> None:
         written, code = self._written(self._eval_at(tmp_path))
 
         assert code == 0
-        assert "2件中 1件で期待したやりとりが上位3件に入った" in written
-        # 出てはいけないやりとりが出た件は、その順位まで読める。
-        assert "出てはいけないやりとりが出た件: 1件" in written
+        assert "2問中 1問で期待したやりとりが上位3件に入った" in written
+        # 出てはいけないやりとりが出た問は、その順位まで読める。
+        assert "出てはいけないやりとりが出た問: 1問" in written
         assert "混入: train 2位" in written
 
-    # ST-018-003 良くなった件と悪くなった件を名指しできる
+    # ST-018-003 良くなった問と悪くなった問を名指しできる
 
-    def test_ST_018_003_良くなった件と悪くなった件が別々に出る(self, tmp_path: Path) -> None:
+    def test_ST_018_003_良くなった問と悪くなった問が別々に出る(self, tmp_path: Path) -> None:
         first, _ = self._written(self._eval_at(tmp_path))
         both, code = self._written(self._eval_at(tmp_path), changed=TIGHTER)
 
         assert code == 0
         assert first in both
-        # 全体では満たした数が変わらなくても、悪くなった件が消えない。
+        # 全体では満たした数が変わらなくても、悪くなった問が消えない。
         assert "良くなった: 混ざる" in both
         assert "悪くなった: 引ける" in both
         assert "tomato 出ず" in both

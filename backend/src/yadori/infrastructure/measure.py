@@ -1,6 +1,6 @@
 """評価セットを測って、結果を書く。
 
-条件を変えて二度測ると、件ごとの差を良くなった件と悪くなった件に分けて書く。
+条件を変えて二度測ると、問ごとの差を良くなった問と悪くなった問に分けて書く。
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class Measure:
         return self._embeddings.name
 
     def _write(self, measurement: Measurement, how: HowToRecall) -> None:
-        """条件、要約、満たさなかった件を書く。要約は件ごとの結果から求める。
+        """条件、要約、満たさなかった問を書く。要約は問ごとの結果から求める。
 
         下限の意味は埋め込みごとに違うため、どの下限で測ったかを毎回書く。
         書かないと、別の埋め込みを既定の下限で測った数を見比べてしまう。
@@ -71,13 +71,13 @@ class Measure:
         self._say(f"埋め込み: {self._named()}")
         self._say(self._conditions(how))
         self._say(
-            f"{measurement.total}件中 {measurement.met}件で"
+            f"{measurement.total}問中 {measurement.met}問で"
             + f"期待したやりとりが上位{measurement.within}件に入った"
         )
-        self._say(f"出てはいけないやりとりが出た件: {measurement.intruded}件")
+        self._say(f"出てはいけないやりとりが出た問: {measurement.intruded}問")
         if measurement.unmeasurable:
             self._say(
-                f"測れない件: {measurement.unmeasurable}件"
+                f"測れない問: {measurement.unmeasurable}問"
                 + "（期待するやりとりが直近として渡っている）"
             )
         for outcome in measurement.outcomes:
@@ -100,7 +100,7 @@ class Measure:
 
     def _write_shifts(self, difference: Difference) -> None:
         if not difference.better and not difference.worse:
-            self._say("満たし方が変わった件はない")
+            self._say("満たし方が変わった問はない")
             return
         for shifted in difference.better:
             self._say(f"良くなった: {shifted.case}  {self._detail(shifted.after)}")

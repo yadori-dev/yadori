@@ -1,6 +1,6 @@
 """二つの測定を突き合わせる。
 
-全体では良くなっても悪くなった件があれば、その件を名指しできるようにする。
+全体では良くなっても悪くなった問があれば、その問を名指しできるようにする。
 """
 
 from __future__ import annotations
@@ -17,17 +17,17 @@ class Comparing:
         self._after: Measurement = after
 
     def difference(self) -> Difference:
-        """件ごとの差を、良くなった件と悪くなった件に分ける。
+        """問ごとの差を、良くなった問と悪くなった問に分ける。
 
-        - 件を突き合わせる
-        - 満たし方が変わった件だけを拾う
+        - 問を突き合わせる
+        - 満たし方が変わった問だけを拾う
         """
         better: list[Shifted] = []
         worse: list[Shifted] = []
         for before in self._before.outcomes:
             after = self._same(before.case)
             if not (before.measurable and after.measurable):
-                # 片方でも測れない件は、良し悪しを言えない。
+                # 片方でも測れない問は、良し悪しを言えない。
                 continue
             was = before.met(self._before.within)
             now = after.met(self._after.within)
@@ -40,4 +40,4 @@ class Comparing:
         for outcome in self._after.outcomes:
             if outcome.case == case:
                 return outcome
-        raise CannotMeasure(f"二つの測定で件が揃っていない: {case}")
+        raise CannotMeasure(f"二つの測定で問が揃っていない: {case}")

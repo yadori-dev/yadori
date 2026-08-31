@@ -50,6 +50,7 @@ WATERING_LATER = "水やりは朝がいいと聞きましたが本当ですか" 
 FERTILIZER = "朝の水やりの話の続きですが肥料も要りますか"  # WATERING_LATER を指す
 NOD = "いいよ"
 POINTING = "それ、どうなった？"
+POINTING_MATTER = "この件で相談したい"  # 「〜の件」も指す語だけの発話
 PASTED = "エラーの記録を貼ります。\n" + "\n".join(f"行 {n}: 処理に失敗しました" for n in range(60))
 FILLERS = [
     "新しい鍵盤楽器が届きました",
@@ -72,6 +73,7 @@ def _place(tmp_path: Path) -> Path:
         (TAX, "期限をお忘れなく"),
         (TAX_SOON, "来月末です"),
         (POINTING, "はい"),
+        (POINTING_MATTER, "はい"),
         (PASTED, "見ました"),
     ]
     _ = write(place / "claude", "a.jsonl", claude_code_lines("s1", WORKSPACE, turns))
@@ -146,6 +148,7 @@ class TestST030001:
         spoken = _utterances(loaded, "exchange")
         assert spoken[:5] == [TOMATO, TAX, TAX_SOON, WATERING, BOOKS]
         assert NOD not in spoken and POINTING not in spoken and PASTED not in spoken
+        assert POINTING_MATTER not in spoken
         assert not any("<" in one or "[Request" in one or "検査役" in one for one in spoken)
         assert spoken.count(TOMATO) == 1
         replies = {
@@ -205,7 +208,7 @@ class TestST030001:
 
 
 class TestST030002:
-    """どの発話が件になり、どれが覚えさせる側に残るか。"""
+    """どの発話が問になり、どれが覚えさせる側に残るか。"""
 
     def _drafted(self, tmp_path: Path, judge: Judge) -> dict[str, object]:
         out = _out(tmp_path)
@@ -213,7 +216,7 @@ class TestST030002:
         assert code == 0, errors
         return _read(out)
 
-    def test_ST_030_002_指すと判定された発話は件になり期待に前の発話が入る(
+    def test_ST_030_002_指すと判定された発話は問になり期待に前の発話が入る(
         self, tmp_path: Path
     ) -> None:
         loaded = self._drafted(tmp_path, FixedJudge(SAFE))
@@ -259,7 +262,7 @@ class TestST030002:
         assert code == 0
         assert _utterances(_read(out), "case") == [TOMATO_LATER]
 
-    def test_ST_030_002_連鎖の真ん中は期待に残り件にならない(self, tmp_path: Path) -> None:
+    def test_ST_030_002_連鎖の真ん中は期待に残り問にならない(self, tmp_path: Path) -> None:
         loaded = self._drafted(
             tmp_path, FixedJudge({WATERING_LATER: [WATERING], FERTILIZER: [WATERING_LATER]})
         )
@@ -277,9 +280,9 @@ class TestST030002:
         assert TAX_SOON not in {asking.utterance for asking in judge.askings}
 
     def test_ST_030_002_外した後の並びで直近に入る期待の組は出ない(self, tmp_path: Path) -> None:
-        # 末尾の MOVIE の後に、遠くを指す件二つと MOVIE を指す件を並べる。三つが件として
+        # 末尾の MOVIE の後に、遠くを指す問二つと MOVIE を指す問を並べる。三つが問として
         # 外れると、残る並びの末尾二つに MOVIE が入り、それを期待とする組は出ない。
-        # MOVIE は思い出す時点では直近の外（間に件が二つ）なので候補には上がる。
+        # MOVIE は思い出す時点では直近の外（間に問が二つ）なので候補には上がる。
         place = _place(tmp_path)
         far1 = "ベランダのトマトの苗を植えた話をもう一度聞かせてください"
         far2 = "住民税の納付書はもう払いましたか"
@@ -325,22 +328,22 @@ class TestST030003:
     def _confirmed(self, out: Path) -> str:
         return out.read_text(encoding="utf-8").replace("confirmed = false", "confirmed = true")
 
-    def test_ST_030_003_確かめていない件があると一件も測らない(self, tmp_path: Path) -> None:
+    def test_ST_030_003_確かめていない問があると一問も測らない(self, tmp_path: Path) -> None:
         code, written, errors = self._measured(self._drafted(tmp_path))
 
         assert code == 1 and written == ""
-        assert "確認していない件が 1 件" in errors
+        assert "確認していない問が 1 問" in errors
 
-    def test_ST_030_003_全件を確認済みにすると測れる(self, tmp_path: Path) -> None:
+    def test_ST_030_003_全問を確認済みにすると測れる(self, tmp_path: Path) -> None:
         out = self._drafted(tmp_path)
         _ = out.write_text(self._confirmed(out), encoding="utf-8")
 
         code, written, _ = self._measured(out)
 
         assert code == 0
-        assert "1件中" in written
+        assert "1問中" in written
 
-    def test_ST_030_003_印を持たない件を手で足しても測れる(self, tmp_path: Path) -> None:
+    def test_ST_030_003_印を持たない問を手で足しても測れる(self, tmp_path: Path) -> None:
         out = self._drafted(tmp_path)
         text = self._confirmed(out) + "\n".join(
             [
@@ -358,19 +361,19 @@ class TestST030003:
         code, written, _ = self._measured(out)
 
         assert code == 0
-        assert "2件中" in written
+        assert "2問中" in written
 
     def test_ST_030_003_印を持たない架空の評価セットは今までどおり測れる(self) -> None:
         code, written, _ = self._measured(Path("evals/recall.toml"))
 
         assert code == 0
-        assert "5件中" in written
+        assert "5問中" in written
 
     @pytest.mark.parametrize(
         ("kind", "old", "new"),
-        [("件", 'name = "c002"', 'name = "c001"'), ("やりとり", 'name = "e002"', 'name = "e001"')],
+        [("問", 'name = "c002"', 'name = "c001"'), ("やりとり", 'name = "e002"', 'name = "e001"')],
     )
-    def test_ST_030_003_名前が重なると一件も測らない(
+    def test_ST_030_003_名前が重なると一問も測らない(
         self, tmp_path: Path, kind: str, old: str, new: str
     ) -> None:
         out = self._drafted(tmp_path, FixedJudge({**SAFE, FERTILIZER: [WATERING_LATER]}))
@@ -423,7 +426,7 @@ class TestST030004:
         )
         assert "記録: 3 セッション、中身のある発話 18 件（読めず飛ばしたファイル 0）" in written
         assert "覚えさせる発話: 17 件" in written
-        assert "件: 1 件" in written and "すべて確認前" in written
+        assert "問: 1 問" in written and "すべて確認前" in written
         assert "confirmed = true にしてください" in written
         assert "手で足せます" in written and "直近の範囲の組は測れないので足しません" in written
         assert "# 候補を引いた 埋め込み: character-pairs-v1" in out.read_text(encoding="utf-8")
@@ -461,13 +464,13 @@ class _Unavailable:
 
 
 class TestST030008:
-    def test_ST_030_008_件が一つも出なければ何も書かず理由が返る(self, tmp_path: Path) -> None:
+    def test_ST_030_008_問が一つも出なければ何も書かず理由が返る(self, tmp_path: Path) -> None:
         out = _out(tmp_path)
 
         code, written, errors = _draft(_place(tmp_path), out, FixedJudge({}))
 
         assert code == 1 and written == ""
-        assert "件が一つも出ませんでした" in errors
+        assert "問が一つも出ませんでした" in errors
         assert not out.exists()
 
     def test_ST_030_008_判定が続かなければ何も書かず理由が返る(self, tmp_path: Path) -> None:

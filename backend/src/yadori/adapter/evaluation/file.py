@@ -1,7 +1,7 @@
 """評価セットをファイルから読む。
 
 リポジトリに置くものは架空の会話で書く。実際の会話から作ったものは手元に置く。
-読むだけで判断しない。確認前の件を断るのは測る側である。
+読むだけで判断しない。確認前の問を断るのは測る側である。
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class EvalFile:
 
         - 書いてあるものを取り出す
         - 覚えさせるやりとりを組む
-        - 測る件を組む
+        - 測る問を組む
         """
         written = self._written()
         return RecallEval(
@@ -66,7 +66,7 @@ class EvalFile:
         )
 
     def _confirmed(self, row: dict[str, object]) -> bool | None:
-        """確認済みの印。欄が無ければ人が書いた件であり、判断は測る側が持つ。"""
+        """確認済みの印。欄が無ければ人が書いた問であり、判断は測る側が持つ。"""
         value = row.get("confirmed")
         if value is None:
             return None

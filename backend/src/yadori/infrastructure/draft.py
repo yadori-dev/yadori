@@ -70,8 +70,8 @@ class Drafter:
             + f"（読めず飛ばしたファイル {draft.skipped_files}）"
         )
         self._say(f"覚えさせる発話: {draft.exchanges} 件")
-        self._say(f"件: {draft.cases} 件（後の発話が前の話題を指していそうなもの。すべて確認前）")
-        self._say(f"  {self._out} の各件を読み、残す件は confirmed = true にしてください")
+        self._say(f"問: {draft.cases} 問（後の発話が前の話題を指していそうなもの。すべて確認前）")
+        self._say(f"  {self._out} の各問を読み、残す問は confirmed = true にしてください")
         self._say(
             "  候補は思い出す仕組みが引いたものだけです。拾えなかった組（下限を下回る、件数の"
             + "上限から外れた）は手で足せます。直近の範囲の組は測れないので足しません"
