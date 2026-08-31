@@ -54,6 +54,15 @@ NAME_DECLARED = "下書きのためだけの名乗り。応対は作らない。
 
 @final
 @dataclass(frozen=True)
+class _Where:
+    """記録の中の居場所。作業場所と時刻は必ず一緒にある。"""
+
+    workspace: str
+    at: datetime
+
+
+@final
+@dataclass(frozen=True)
 class _Placed:
     """解く並びの一つ。前回のやりとりは名前付き、新しい発話は名前無し。
 
@@ -64,8 +73,7 @@ class _Placed:
     name: str | None
     utterance: str
     reply: str
-    workspace: str | None
-    at: datetime | None
+    where: _Where | None
 
     @property
     def is_new(self) -> bool:
@@ -296,8 +304,7 @@ class Drafting:
                 name=None,
                 utterance=one.utterance,
                 reply=one.reply,
-                workspace=one.workspace,
-                at=one.at,
+                where=_Where(one.workspace, one.at),
             )
             for one in incoming
         )
@@ -308,8 +315,7 @@ class Drafting:
             name=exchange.name,
             utterance=exchange.utterance,
             reply=exchange.reply,
-            workspace=None if found is None else found.workspace,
-            at=None if found is None else found.at,
+            where=None if found is None else _Where(found.workspace, found.at),
         )
 
     def _asked(self, placed: Sequence[_Placed]) -> list[tuple[int, Asking]]:
@@ -341,19 +347,11 @@ class Drafting:
 
     def _by_workspace(self, placed: Sequence[_Placed]) -> list[list[int]]:
         """作業場所ごとの、時刻の順の番号。記録に見つからなかった前回のやりとりは入らない。"""
-        grouped: dict[str, list[int]] = {}
+        grouped: dict[str, list[tuple[datetime, int]]] = {}
         for index, one in enumerate(placed):
-            if one.workspace is not None:
-                grouped.setdefault(one.workspace, []).append(index)
-        return [
-            sorted(indexes, key=lambda index: self._at_of(placed[index]))
-            for indexes in grouped.values()
-        ]
-
-    def _at_of(self, one: _Placed) -> datetime:
-        if one.at is None:
-            raise CannotDraft("時刻の無い発話を記憶に入れようとしました")
-        return one.at
+            if one.where is not None:
+                grouped.setdefault(one.where.workspace, []).append((one.where.at, index))
+        return [[index for _, index in sorted(indexes)] for indexes in grouped.values()]
 
     def _judged(
         self, placed: Sequence[_Placed], askings: Sequence[tuple[int, Asking]]

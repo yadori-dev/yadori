@@ -9,8 +9,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import pytest
-
 from tests.appending import (
     ALONE,
     BOOK,
@@ -20,6 +18,7 @@ from tests.appending import (
     MOVIE,
     MOVIE_AGAIN,
     NOD,
+    PIANO,
     TAX,
     TAX_AGAIN,
     TOMATO,
@@ -124,23 +123,34 @@ class TestST037001:
         self, tmp_path: Path
     ) -> None:
         place, out = first_draft(tmp_path)
-        # 新しい発話は一つだけ。合わせた並びの末尾二つは e006（PIANO）とその発話になり、
-        # PIANO を指す組は直近として外れる。
+        # 三つ目の発話は e006（PIANO）を指す。思い出す時点では前に二つ新しい発話があるので
+        # PIANO は直近の外にあり候補に上がるが、問を外した後の合わせた並び（e001〜e006）の
+        # 末尾二つに e006 が入るので問にならず、覚えさせる側に残る。
         piano_again = "ピアノの発表会の曲は決まりましたか"
         _ = write(
             place,
             "more.jsonl",
-            claude_code_lines("s3", WORKSPACE, [(piano_again, "はい")], first_minute=200),
+            claude_code_lines(
+                "s3",
+                WORKSPACE,
+                [(MOVIE_AGAIN, "はい"), (BOOK_AGAIN, "はい"), (piano_again, "はい")],
+                first_minute=200,
+            ),
         )
+        judge = judge_of({MOVIE_AGAIN: [MOVIE], BOOK_AGAIN: [BOOK], piano_again: [PIANO]})
 
-        code, written, errors = drafted(
-            place, out, judge_of({piano_again: ["ピアノの発表会の曲を決めました"]}), append=True
-        )
+        code, written, errors = drafted(place, out, judge, append=True)
 
         assert code == 0, errors
-        assert names(out, "case") == ["c001", "c002"]
-        assert piano_again in utterances(out, "exchange")
-        assert "問: 増えませんでした" in written
+        piano_askings = [asking for asking in judge.askings if asking.utterance == piano_again]
+        assert piano_askings and PIANO in piano_askings[0].candidates
+        assert names(out, "case") == ["c001", "c002", "c003", "c004"]
+        assert utterances(out, "case")[-2:] == [MOVIE_AGAIN, BOOK_AGAIN]
+        assert utterances(out, "exchange")[-1] == piano_again
+        assert "覚えさせる発話: +1 件" in written and "問: +2 問" in written
+        _confirmed_all(out)
+        measured = Measuring(EvalFile(out).read(), InMemoryMemories, CharacterPairs()).at(HOW)
+        assert measured.total == 4 and measured.unmeasurable == 0
 
 
 class TestST037002:
@@ -229,7 +239,7 @@ class TestST037003:
                 "AIモデル違い",
                 out,
                 {"embeddings": Relabeled(Provenance("some-model", "character-pairs", "v1"))},
-                "埋め込みの AIモデル",
+                "埋め込みの AIモデル（前回 AIモデル無し、今回 some-model）",
             ),
             ("下限違い", out, {"how": HowToRecall(2, 10, 0.2)}, "思い出し方"),
             ("判定違い", out, {"judge": FixedJudge({}, name="other-judge")}, "判定の AIモデル"),
@@ -385,8 +395,7 @@ class TestST037005:
         assert covered_of(out)["skipped"] == []
 
 
-@pytest.mark.parametrize("flag", ["--append"])
-def test_ST_037_入口の例の形で使える(flag: str, tmp_path: Path) -> None:
+def test_ST_037_入口の例の形で使える(tmp_path: Path) -> None:
     """入口の例に書いた行が、実際の出力に現れる。"""
     place, out = first_draft(tmp_path)
     _ = write(
@@ -394,7 +403,6 @@ def test_ST_037_入口の例の形で使える(flag: str, tmp_path: Path) -> Non
         "more.jsonl",
         claude_code_lines("s3", WORKSPACE, [(MOVIE_AGAIN, "x")], first_minute=200),
     )
-    del flag
 
     code, written, errors = drafted(place, out, judge_of({MOVIE_AGAIN: [MOVIE]}), append=True)
 

@@ -68,8 +68,12 @@ class DraftFile:
         _ = path.write_text("\n".join(lines), encoding="utf-8")
 
     def read(self, path: Path) -> tuple[RecallEval, Covered]:
-        """前回の下書きを読む。前回の範囲を持たないものは追記の対象でない。"""
+        """前回の下書きを読む。前回の範囲を持たないものは追記の対象でない。
+
+        出力先の境界はここでも見る。判定を全部走らせた後に断るのは遅い。
+        """
         self._refuse_missing(path)
+        self._refuse_outside(path)
         try:
             written = tomllib.loads(path.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as broken:

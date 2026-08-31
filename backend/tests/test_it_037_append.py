@@ -477,19 +477,22 @@ class TestIT037004:
     ) -> None:
         place, out, spoken = self._previous(tmp_path)
         n1 = "英会話の教室について相談した件はどうなりましたか"
-        n2 = "年賀状の準備について相談した件はどうなりましたか"
+        n2 = "図書館の返却期限について相談した件はどうなりましたか"
         n3 = ALONE
         _ = write(
             place,
             "b.jsonl",
-            claude_code_lines("s2", WORKSPACE, [(n1, "x"), (n2, "x"), (n3, "x")], first_minute=200),
+            # 時刻の順は新1・新3・新2。新2 の思い出す時点で e016 は直近（6 往復）の外にある。
+            claude_code_lines("s2", WORKSPACE, [(n1, "x"), (n3, "x"), (n2, "x")], first_minute=200),
         )
-        judge = FixedJudge({n1: [spoken[4]], n2: [spoken[19]]})
+        judge = FixedJudge({n1: [spoken[4]], n2: [spoken[15]]})
 
         appended = _drafting(judge, how=self._how()).append([place], out)
 
+        n2_askings = [asking for asking in judge.askings if asking.utterance == n2]
+        assert n2_askings and spoken[15] in n2_askings[0].candidates
         assert names(out, "exchange")[-2:] == ["e021", "e022"]
-        assert utterances(out, "exchange")[-2:] == [n2, n3]
+        assert utterances(out, "exchange")[-2:] == [n3, n2]
         assert names(out, "case") == ["c001", "c002", "c-renamed", "c006"]
         loaded = EvalFile(out).read()
         assert loaded.cases[-1].utterance == n1 and loaded.cases[-1].expected == ("e005",)
@@ -503,7 +506,7 @@ class TestIT037004:
         measured = Measuring(EvalFile(out).read(), InMemoryMemories, CharacterPairs()).at(
             self._how()
         )
-        assert measured.total == 4
+        assert measured.total == 4 and measured.unmeasurable == 0
 
     def test_IT_037_004_壊れた前回の分では何も書かれない(self, tmp_path: Path) -> None:
         place, out, _ = self._previous(tmp_path)

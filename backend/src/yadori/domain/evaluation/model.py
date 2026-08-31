@@ -290,33 +290,33 @@ class DrawnWith:
     how: HowToRecall
     judge: str
 
-    def differs_from(self, other: DrawnWith) -> str | None:
-        """今の引き方と違うところ。同じなら無し。"""
+    def differs_from(self, now: DrawnWith) -> str | None:
+        """前回（自分）から見て、今の引き方（now）と違うところ。同じなら無し。"""
         found: list[str] = []
-        if self.provenance.ai_model != other.provenance.ai_model:
+        if self.provenance.ai_model != now.provenance.ai_model:
             found.append(
                 f"埋め込みの AIモデル（前回 {self.provenance.ai_model or 'AIモデル無し'}、"
-                + f"今回 {other.provenance.ai_model or 'AIモデル無し'}）"
+                + f"今回 {now.provenance.ai_model or 'AIモデル無し'}）"
             )
-        if self.provenance.tool != other.provenance.tool:
+        if self.provenance.tool != now.provenance.tool:
             found.append(
-                f"埋め込みを動かす道具（前回 {self.provenance.tool}、今回 {other.provenance.tool}）"
+                f"埋め込みを動かす道具（前回 {self.provenance.tool}、今回 {now.provenance.tool}）"
             )
-        if self.how != other.how:
+        if self.how != now.how:
             found.append(
-                f"思い出し方（前回 {self._how_of(self.how)}、今回 {self._how_of(other.how)}）"
+                f"思い出し方（前回 {self._how_of(self.how)}、今回 {self._how_of(now.how)}）"
             )
-        if self.judge != other.judge:
-            found.append(f"判定の AIモデル（前回 {self.judge}、今回 {other.judge}）")
+        if self.judge != now.judge:
+            found.append(f"判定の AIモデル（前回 {self.judge}、今回 {now.judge}）")
         return "、".join(found) if found else None
 
-    def tool_version_changed(self, other: DrawnWith) -> str | None:
-        """道具の版だけが違うときの注意。同じなら無し。"""
-        if self.provenance.tool_version == other.provenance.tool_version:
+    def tool_version_changed(self, now: DrawnWith) -> str | None:
+        """前回（自分）から見て、今の道具の版だけが違うときの注意。同じなら無し。"""
+        if self.provenance.tool_version == now.provenance.tool_version:
             return None
         return (
             f"埋め込みを動かす道具の版が前回（{self.provenance.tool}-{self.provenance.tool_version}）"
-            + f"と違います（今回 {other.provenance.tool}-{other.provenance.tool_version}）。"
+            + f"と違います（今回 {now.provenance.tool}-{now.provenance.tool_version}）。"
             + "候補の引き方がわずかに変わり得ます"
         )
 
