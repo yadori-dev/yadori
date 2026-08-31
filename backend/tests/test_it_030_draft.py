@@ -324,8 +324,6 @@ class TestIT030004:
         _ = path.write_text(text, encoding="utf-8")
         assert EvalFile(path).read().cases[0].confirmed is False
 
-
-class TestIT030004Empty:
     def test_IT_030_004_問の無い評価セットは読み手が読み測る側が断る(self, tmp_path: Path) -> None:
         empty = tmp_path / "empty.toml"
         _ = empty.write_text(

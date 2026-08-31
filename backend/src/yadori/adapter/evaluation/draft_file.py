@@ -91,6 +91,8 @@ class DraftFile:
         """前回の分を一字も変えずに、前回の範囲を置き換え、足す分を末尾に足す。
 
         同じディレクトリに一時ファイルを書いてから差し替えるので、途中で落ちても元は残る。
+        差し替えた結果に前回のやりとりと問の名前がすべて残っていることを、書く前に確かめる。
+        切り方を誤って前回の分を消すのは、失敗を名乗らずに人の確認を失う最悪の形だからである。
         """
         self._refuse_missing(path)
         self._refuse_outside(path)
@@ -107,7 +109,38 @@ class DraftFile:
             + ("\n" if blocks else "")
             + "\n".join(blocks)
         )
+        self._verify_kept(path, text, joined, added)
         self._replace(path, joined)
+
+    def _verify_kept(self, path: Path, before: str, after: str, added: Added) -> None:
+        """前回の名前がすべて残り、足した分だけ増えていることを、文字の並びから読み直して確かめる。"""
+        was = self._names_in(path, before)
+        now = self._names_in(path, after)
+        expected = (
+            was
+            | {("exchange", one.name) for one in added.exchanges}
+            | {("case", one.name) for one in added.cases}
+        )
+        if now != expected:
+            raise CannotDraft(
+                f"{path} への追記で前回の分が残らないので書きません。"
+                + "下書きの形が道具の想定と違います。新しいファイルへ作り直してください"
+            )
+
+    def _names_in(self, path: Path, text: str) -> set[tuple[str, str]]:
+        try:
+            written = tomllib.loads(text)
+        except tomllib.TOMLDecodeError as broken:
+            raise CannotDraft(f"{path} を評価セットとして読めません: {broken}") from broken
+        found: set[tuple[str, str]] = set()
+        for key in ("exchange", "case"):
+            rows: object = written.get(key, [])
+            if not isinstance(rows, list):
+                raise CannotDraft(f"{path} の {key} の書き方が違います")
+            for row in rows:  # pyright: ignore[reportUnknownVariableType]
+                if isinstance(row, dict) and isinstance(row.get("name"), str):  # pyright: ignore[reportUnknownMemberType]
+                    found.add((key, row["name"]))  # pyright: ignore[reportUnknownArgumentType]
+        return found
 
     def _refuse_missing(self, path: Path) -> None:
         if path.is_dir():
@@ -132,7 +165,11 @@ class DraftFile:
         if start is None:
             raise CannotDraft(f"{path} は{NOT_APPENDABLE}")
         end = next(
-            (index for index in range(start + 1, len(lines)) if lines[index].startswith("[")),
+            (
+                index
+                for index in range(start + 1, len(lines))
+                if lines[index].lstrip().startswith("[")
+            ),
             len(lines),
         )
         return "".join(lines[:start]), "".join(lines[end:])
