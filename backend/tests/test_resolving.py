@@ -105,7 +105,7 @@ class TestResolving:
         assert resolved.added.cases[0].expected == ("e001",)
         assert resolved.added.cases[0].overlap[0][0] == "e001"
 
-    def test_前回の分が壊れていれば断り前回の問は変えない(self) -> None:
+    def test_壊れた前回の分は測れる形にならず断る(self) -> None:
         previous = [_old("e001", "前1", 1)]
         broken = Previous(
             exchanges=(Exchange("e001", "前1", "前の返事"),),

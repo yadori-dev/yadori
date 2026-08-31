@@ -95,9 +95,8 @@ class Resolved:
 class Resolving:
     """組を解く。直近の往復数は思い出し方から取り、測るときと同じ窓で数える。"""
 
-    def __init__(self, how: HowToRecall, within: int = WITHIN) -> None:
+    def __init__(self, how: HowToRecall) -> None:
         self._how: HowToRecall = how
-        self._within: int = within
         self._overlap: Overlap = Overlap()
 
     def resolve(
@@ -137,7 +136,7 @@ class Resolving:
             for number, (later, earliers) in enumerate(sorted(case_of.items()), start=1)
         )
         recall_eval = RecallEval(
-            within=self._within,
+            within=WITHIN,
             exchanges=previous.exchanges + new_exchanges,
             cases=previous.cases + new_cases,
         )
