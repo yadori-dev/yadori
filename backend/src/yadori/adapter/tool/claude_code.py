@@ -36,6 +36,11 @@ class ClaudeCodeCall:
         self._model: str = model
         self._wait_seconds: int = wait_seconds
 
+    @property
+    def model(self) -> str:
+        """実際に呼ぶ AIモデルの名前。下書きに何で判定したかを残すために読む。"""
+        return self._model
+
     def ask(self, preface: str, spoken: str) -> str:
         """前置きと文章を渡し、返事の文章だけを受け取る。"""
         return self._as_reply(self._run(preface, spoken))

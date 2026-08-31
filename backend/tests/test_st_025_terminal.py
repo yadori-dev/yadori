@@ -13,7 +13,7 @@ from pathlib import Path
 from tests.sora import Ticking
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.domain.memory import EmbeddingsUnavailable, Recollection, Vector
+from yadori.domain.memory import EmbeddingsUnavailable, Provenance, Recollection, Vector
 from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation, Turn
@@ -25,8 +25,12 @@ class _Missing:
     """導入されていない埋め込み。理由に何をすればよいかを含める。"""
 
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="missing", tool_version="v0")
+
+    @property
     def name(self) -> str:
-        return "missing"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         del text

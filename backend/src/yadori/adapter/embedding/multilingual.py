@@ -21,7 +21,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Protocol, final
 
-from yadori.domain.memory import EmbeddingsUnavailable, Vector
+from yadori.domain.memory import EmbeddingsUnavailable, Provenance, Vector
 
 MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 TOOL = "fastembed"
@@ -38,10 +38,16 @@ class Multilingual:
         self._loaded: _Embedder | None = None
 
     @property
+    def provenance(self) -> Provenance:
+        # AIモデルの名前は提供元の接頭辞を落とした短い名前。道具の版で数の並びの作り方が
+        # 変わるため、版まで出自に含める。
+        return Provenance(
+            ai_model=self._model.split("/")[-1], tool=TOOL, tool_version=self._tool_version()
+        )
+
+    @property
     def name(self) -> str:
-        # 道具の版で数の並びの作り方が変わるため、版まで名前に含める。
-        short = self._model.split("/")[-1]
-        return f"{short}/{TOOL}-{self._tool_version()}"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         # 外の道具は数の並びへ型を付けないため、ここで受けて確かめる。

@@ -28,7 +28,7 @@ from tests.sora import (
 )
 from yadori.adapter.embedding.characters import CharacterPairs
 from yadori.adapter.store import InMemoryMemories, SqliteMemories
-from yadori.domain.memory import Episode, Memories, NameNotDeclared, Vector
+from yadori.domain.memory import Episode, Memories, NameNotDeclared, Provenance, Vector
 from yadori.usecase.conversation import Conversation
 
 
@@ -67,8 +67,12 @@ class _SwappedEmbeddings:
     """別の作りの埋め込み。文字一つずつを見るため、二つ組の実装とは違う結果になる。"""
 
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="single-characters", tool_version="v1")
+
+    @property
     def name(self) -> str:
-        return "single-characters-v1"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         counts: list[float] = [0.0] * 512

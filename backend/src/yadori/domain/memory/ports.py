@@ -9,7 +9,7 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Protocol
 
-from yadori.domain.memory.model import Dweller, Episode, Identity, Retrieval, Vector
+from yadori.domain.memory.model import Dweller, Episode, Identity, Provenance, Retrieval, Vector
 
 
 class NameNotDeclared(Exception):
@@ -82,8 +82,11 @@ class Memories(Protocol):
 class Embeddings(Protocol):
     """文章を、意味の近いものどうしが近くなる数値の並びへ変える。
 
-    どの埋め込みのどの版で作ったかをインデックスへ残すため、名前を持つ。
+    何で作ったか（出自）を自分で答える。インデックスの名前は出自から組んだものである。
     """
+
+    @property
+    def provenance(self) -> Provenance: ...
 
     @property
     def name(self) -> str: ...
