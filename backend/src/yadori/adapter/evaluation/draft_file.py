@@ -74,13 +74,16 @@ class DraftFile:
         """
         self._refuse_missing(path)
         self._refuse_outside(path)
+        text = path.read_text(encoding="utf-8")
         try:
-            written = tomllib.loads(path.read_text(encoding="utf-8"))
+            written = tomllib.loads(text)
         except tomllib.TOMLDecodeError as broken:
             raise CannotDraft(f"{path} を評価セットとして読めません: {broken}") from broken
         table = written.get("covered")
         if not isinstance(table, dict):
             raise CannotDraft(f"{path} は{NOT_APPENDABLE}")
+        # 追記で置き換える見出しの行も、判定を呼ぶ前にここで見つけておく。
+        _ = self._around_covered(path, text)
         try:
             recall_eval = EvalFile(path).read()
         except CannotMeasure as broken:
@@ -123,8 +126,8 @@ class DraftFile:
         )
         if now != expected:
             raise CannotDraft(
-                f"{path} への追記で前回の分が残らないので書きません。"
-                + "下書きの形が道具の想定と違います。新しいファイルへ作り直してください"
+                f"{path} への追記で前回の分を保てないので書きませんでした。道具の側の不具合です。"
+                + "下書きはそのままで、作り直す必要はありません"
             )
 
     def _names_in(self, path: Path, text: str) -> set[tuple[str, str]]:
@@ -160,7 +163,9 @@ class DraftFile:
         """`[covered]` の前と、その次の見出し（無ければ末尾）から後。表の中身は返さない。"""
         lines = text.splitlines(keepends=True)
         start = next(
-            (index for index, line in enumerate(lines) if line.strip() == COVERED_HEAD), None
+            # 見出しの後ろには空白か注釈しか来ない。
+            (index for index, line in enumerate(lines) if line.strip().startswith(COVERED_HEAD)),
+            None,
         )
         if start is None:
             raise CannotDraft(f"{path} は{NOT_APPENDABLE}")

@@ -161,9 +161,9 @@ def names(out: Path, key: str) -> list[str]:
 def outside_covered(text: str) -> str:
     """`[covered]` の塊を除いた文字の並び。追記で変わってはいけない部分。"""
     lines = text.splitlines(keepends=True)
-    start = next(index for index, line in enumerate(lines) if line.strip() == "[covered]")
+    start = next(index for index, line in enumerate(lines) if line.strip().startswith("[covered]"))
     end = next(
-        (index for index in range(start + 1, len(lines)) if lines[index].startswith("[")),
+        (index for index in range(start + 1, len(lines)) if lines[index].lstrip().startswith("[")),
         len(lines),
     )
     return "".join(lines[:start] + lines[end:])

@@ -74,8 +74,8 @@ class Drafter:
             print(f"下書きを作れません: {reason}", file=sys.stderr)
             return 1
         except OSError as trouble:
-            # 書く先の容量や権限。下書き自体は差し替え前のまま残っている。
-            print(f"下書きを書けません: {trouble}", file=sys.stderr)
+            # 読む先や書く先の権限、容量。追記なら下書きは差し替え前のまま残っている。
+            print(f"下書きを読み書きできません: {trouble}", file=sys.stderr)
             return 1
         return 0
 

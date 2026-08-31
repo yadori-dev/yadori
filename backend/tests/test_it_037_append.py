@@ -548,7 +548,9 @@ class TestIT037005:
         text = text.replace(e001, "")
         text = text.replace('name = "e002"', 'name = "ピアノの話"') + "\n# 注釈\n\n" + e001
         # 人が見出しを字下げしても、TOML としては正しく、前回の分は残る。
-        text = text.replace("[[case]]\n", "  [[case]]\n", 1)
+        text = text.replace("[[exchange]]\n", "  [[exchange]]\n", 1).replace(
+            "[covered]\n", "[covered] # 触らない\n"
+        )
         text = text.replace("confirmed = false", "confirmed = true")
         _ = out.write_text(text, encoding="utf-8")
         before = out.read_text(encoding="utf-8")
