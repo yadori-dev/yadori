@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import final
 
@@ -31,11 +31,14 @@ class Measuring:
         self,
         recall_eval: RecallEval,
         fresh_memories: Callable[[], Memories],
-        embeddings: Embeddings,
+        embeddings: Embeddings | Sequence[Embeddings],
     ) -> None:
         self._eval: RecallEval = recall_eval
         self._fresh_memories: Callable[[], Memories] = fresh_memories
-        self._embeddings: Embeddings = embeddings
+        self._embeddings: Embeddings | Sequence[Embeddings] = embeddings
+        self._ways: tuple[Embeddings, ...] = (
+            tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
+        )
 
     def at(self, how: HowToRecall) -> Measurement:
         """その条件で全件を測る。
@@ -79,7 +82,11 @@ class Measuring:
 
     def _check_indexed(self, kept: Memories) -> None:
         """索引を持たないやりとりが無いことを確かめる。"""
-        missing = kept.episodes_without_index(MEASURED.id)
+        missing = [
+            episode
+            for way in self._ways
+            for episode in kept.episodes_without_index(MEASURED.id, way.name)
+        ]
         if missing:
             raise CannotMeasure(f"索引を持たないやりとりがある: {len(missing)}件")
 

@@ -11,10 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import final
 
-from yadori.adapter.embedding import CharacterPairs
+from yadori.adapter.embedding import Multilingual
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.voice import ClaudeCodeVoice
+from yadori.domain.memory import EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
 
@@ -33,6 +34,7 @@ class Startup:
         - 記憶を開く
         - 宿りを住まわせ、名乗りを確かめる
         - 一往復の手順を組む
+        - いまの模型の索引が無い記憶を作り直す
         - 話す場所へ繋いで待つ
         """
         try:
@@ -43,13 +45,17 @@ class Startup:
         memories = SqliteMemories(settings.memories_path)
         try:
             self.settle(memories, settings)
-            Terminal(self._assemble(memories, settings), settings.dweller).listen()
+            turn = self._assemble(memories, settings)
+            self._catch_up(turn, settings)
+            Terminal(turn, settings.dweller).listen()
+        except EmbeddingsUnavailable as missing:
+            return self._refuse(missing)
         finally:
             memories.close()
         return 0
 
-    def _refuse(self, missing: NotSettled) -> int:
-        """起こせない理由を書いて、何も作らずに終わる。"""
+    def _refuse(self, missing: NotSettled | EmbeddingsUnavailable) -> int:
+        """起こせない理由を書いて、記憶を増やさずに終わる。何を用意すればよいかは理由が持つ。"""
         print(missing, file=sys.stderr)
         return 1
 
@@ -63,13 +69,24 @@ class Startup:
         if current is None or current.text != settings.name_declared:
             _ = memories.write_identity(settings.dweller.id, settings.name_declared)
 
+    def _catch_up(self, turn: Turn, settings: Settings) -> None:
+        """いまの模型の索引を持たない記憶へ、索引を作る。
+
+        模型を替えると、それまでの索引は使えない。原文は残っているため、
+        ここで作り直せば以前の記憶も新しい模型で探せる。
+        """
+        rebuilt = turn.rebuild_index(settings.dweller.id)
+        if rebuilt:
+            print(f"（{rebuilt}件の記憶へ、いまの模型で索引を作りました）")
+
     def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは文字の並びから作る実装を使う。応対の文章は、持ち主の定額
-        契約で動く対話する道具が作る。
+        埋め込みは意味を見る実装を手元で動かす。模型は宿りの置き場の下に置く。
+        応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
-        conversation = Conversation(memories, CharacterPairs(), self._now)
+        embeddings = Multilingual(cache_dir=settings.models_path)
+        conversation = Conversation(memories, embeddings, self._now)
         return Turn(conversation, ClaudeCodeVoice(settings.model))
 
     def _now(self) -> datetime:

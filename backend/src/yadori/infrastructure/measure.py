@@ -6,14 +6,15 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO, final
 
-from yadori.adapter.embedding import CharacterPairs
+from yadori.adapter.embedding import Multilingual
 from yadori.adapter.evaluation import EvalFile
 from yadori.adapter.store import InMemoryMemories
 from yadori.domain.evaluation import CannotMeasure, Difference, Measurement, Outcome
-from yadori.domain.memory import HowToRecall
+from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall
 from yadori.usecase.evaluation import Comparing, Measuring
 
 DEFAULT_EVAL = Path("evals/recall.toml")
@@ -26,11 +27,15 @@ class Measure:
     def __init__(
         self,
         eval_path: Path | None = None,
+        baseline: HowToRecall | None = None,
         changed: HowToRecall | None = None,
+        embeddings: Embeddings | Sequence[Embeddings] | None = None,
         writing: TextIO | None = None,
     ) -> None:
         self._eval_path: Path = eval_path or DEFAULT_EVAL
+        self._baseline: HowToRecall = baseline or HowToRecall()
         self._changed: HowToRecall | None = changed
+        self._embeddings: Embeddings | Sequence[Embeddings] = embeddings or Multilingual()
         self._writing: TextIO = writing or sys.stdout
 
     def run(self) -> int:
@@ -42,18 +47,29 @@ class Measure:
         """
         try:
             recall_eval = EvalFile(self._eval_path).read()
-            measuring = Measuring(recall_eval, InMemoryMemories, CharacterPairs())
-            now = measuring.at(HowToRecall())
-            self._write(now)
+            measuring = Measuring(recall_eval, InMemoryMemories, self._embeddings)
+            now = measuring.at(self._baseline)
+            self._write(now, self._baseline)
             if self._changed is not None:
                 self._write_difference(measuring, now, self._changed)
-        except CannotMeasure as reason:
+        except (CannotMeasure, EmbeddingsUnavailable) as reason:
             print(f"測れません: {reason}", file=sys.stderr)
             return 1
         return 0
 
-    def _write(self, measurement: Measurement) -> None:
-        """要約と、満たさなかった件を書く。要約は件ごとの結果から求める。"""
+    def _named(self) -> str:
+        if isinstance(self._embeddings, Sequence):
+            return "＋".join(way.name for way in self._embeddings)
+        return self._embeddings.name
+
+    def _write(self, measurement: Measurement, how: HowToRecall) -> None:
+        """条件、要約、満たさなかった件を書く。要約は件ごとの結果から求める。
+
+        下限の意味は埋め込みごとに違うため、どの下限で測ったかを毎回書く。
+        書かないと、別の埋め込みを既定の下限で測った数を見比べてしまう。
+        """
+        self._say(f"埋め込み: {self._named()}")
+        self._say(self._conditions(how))
         self._say(
             f"{measurement.total}件中 {measurement.met}件で"
             + f"期待したやりとりが上位{measurement.within}件に入った"
@@ -77,11 +93,8 @@ class Measure:
     ) -> None:
         after = measuring.at(changed)
         self._say("")
-        self._say(
-            f"直近{changed.recent_turns}往復・上限{changed.found_limit}件・"
-            + f"下限{changed.relevance_floor}にして測り直した"
-        )
-        self._write(after)
+        self._say("条件を変えて測り直した")
+        self._write(after, changed)
         self._say("")
         self._write_shifts(Comparing(before, after).difference())
 
@@ -93,6 +106,12 @@ class Measure:
             self._say(f"良くなった: {shifted.case}  {self._detail(shifted.after)}")
         for shifted in difference.worse:
             self._say(f"悪くなった: {shifted.case}  {self._detail(shifted.after)}")
+
+    def _conditions(self, how: HowToRecall) -> str:
+        return (
+            f"条件: 直近{how.recent_turns}往復・上限{how.found_limit}件・"
+            + f"下限{how.relevance_floor}"
+        )
 
     def _detail(self, outcome: Outcome) -> str:
         expected = (

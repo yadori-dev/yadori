@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+from yadori.adapter.embedding import CharacterPairs
 from yadori.domain.memory import HowToRecall
 from yadori.infrastructure.measure import Measure
 
@@ -72,14 +73,23 @@ expected = []
 forbidden = ["train"]
 """
 
-# 既定より締めると、引ける件が出なくなり、混ざる件の混入が消える。
+# 語の重なりを見る埋め込みに合う条件。既定は埋め込みごとに違うため固定する。
+BASELINE = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.21)
+# 締めると、引ける件が出なくなり、混ざる件の混入が消える。
 TIGHTER = HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.35)
 
 
 class TestMeasure:
     def _written(self, path: Path, changed: HowToRecall | None = None) -> tuple[str, int]:
         writing = io.StringIO()
-        code = Measure(eval_path=path, changed=changed, writing=writing).run()
+        # 測る仕組みを確かめるため、埋め込みは固定する。替えると数が変わる。
+        code = Measure(
+            eval_path=path,
+            baseline=BASELINE,
+            changed=changed,
+            embeddings=CharacterPairs(),
+            writing=writing,
+        ).run()
         return writing.getvalue(), code
 
     def _eval_at(self, tmp_path: Path, body: str = EVAL) -> Path:

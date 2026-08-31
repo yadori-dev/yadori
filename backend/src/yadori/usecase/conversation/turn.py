@@ -51,6 +51,10 @@ class Turn:
         episode = self._remember(dweller_id, utterance, reply)
         return Response(reply=reply, recollection=recollection, episode=episode)
 
+    def rebuild_index(self, dweller_id: str) -> int:
+        """いまの模型の索引が無い記憶へ、索引を作る。"""
+        return self._conversation.rebuild_index(dweller_id)
+
     def _recall(self, dweller_id: str, utterance: str) -> Recollection:
         """関係する記憶と名乗りを取り出す。
 

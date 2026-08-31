@@ -9,15 +9,18 @@ import sys
 from pathlib import Path
 from typing import final
 
-from yadori.domain.memory import HowToRecall
+from yadori.adapter.embedding import CharacterPairs, Multilingual
+from yadori.domain.memory import Embeddings, HowToRecall
 from yadori.infrastructure.measure import Measure
+from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
 
 USAGE = (
     "使い方:\n"
     + "  python -m yadori                    宿りを起こして話す\n"
     + "  python -m yadori measure            今の条件で測る\n"
-    + "  python -m yadori measure [--eval PATH] [--floor N] [--recent N] [--limit N]\n"
+    + "  python -m yadori measure [--eval PATH] [--embedding NAME(+NAME)]\n"
+    + "                          [--floor N] [--recent N] [--limit N]\n"
     + "                                      条件を変えて測り、件ごとの差を出す\n"
     + "\n"
     + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
@@ -51,13 +54,44 @@ class Entry:
             return 1
         given = dict(zip(rest[::2], rest[1::2], strict=True))
         eval_path = self._eval_path(given)
+        embeddings = self._embeddings(given)
+        if embeddings is None:
+            print(USAGE, file=sys.stderr)
+            return 1
         if not given:
-            return Measure(eval_path=eval_path).run()
+            return Measure(eval_path=eval_path, embeddings=embeddings).run()
         changed = self._changed(given)
         if changed is None:
             print(USAGE, file=sys.stderr)
             return 1
-        return Measure(eval_path=eval_path, changed=changed).run()
+        return Measure(eval_path=eval_path, changed=changed, embeddings=embeddings).run()
+
+    def _embeddings(self, given: dict[str, str]) -> Embeddings | list[Embeddings] | None:
+        """どの道で測るか。加算で並べると、両方の道から渡す形になる。"""
+        chosen = given.pop("--embedding", None)
+        if chosen is None:
+            return self._multilingual()
+        ways = [self._one(name) for name in chosen.split("+")]
+        if any(way is None for way in ways):
+            return None
+        picked = [way for way in ways if way is not None]
+        return picked[0] if len(picked) == 1 else picked
+
+    def _one(self, name: str) -> Embeddings | None:
+        if name == "characters":
+            return CharacterPairs()
+        if name == "multilingual":
+            return self._multilingual()
+        if "/" in name:
+            return self._multilingual(name)
+        return None
+
+    def _multilingual(self, model: str | None = None) -> Multilingual:
+        """会話と同じ置き場の模型で測る。取り直さない。"""
+        cache_dir = SettingsFile().models_path
+        if model is None:
+            return Multilingual(cache_dir=cache_dir)
+        return Multilingual(model, cache_dir=cache_dir)
 
     def _eval_path(self, given: dict[str, str]) -> Path | None:
         """どの評価セットを測るか。省けばリポジトリの架空のものを測る。"""

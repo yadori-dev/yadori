@@ -37,9 +37,10 @@ CREATE TABLE IF NOT EXISTS episode (
     happened_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS episode_index (
-    episode_id INTEGER PRIMARY KEY REFERENCES episode(id),
+    episode_id INTEGER NOT NULL REFERENCES episode(id),
     model TEXT NOT NULL,
-    vector TEXT NOT NULL
+    vector TEXT NOT NULL,
+    PRIMARY KEY (episode_id, model)
 );
 CREATE TABLE IF NOT EXISTS retrieval (
     episode_id INTEGER NOT NULL REFERENCES episode(id),
@@ -86,7 +87,22 @@ class SqliteMemories:
         self._connection: sqlite3.Connection = sqlite3.connect(path, isolation_level=None)
         self._connection.row_factory = sqlite3.Row
         _ = self._connection.execute("PRAGMA foreign_keys = ON")
+        self._discard_old_index_table()
         _ = self._connection.executescript(_SCHEMA)
+
+    def _discard_old_index_table(self) -> None:
+        """以前の版が作った索引の表は、形が違えば捨てる。原文の表には触れない。
+
+        索引は原文から作り直せる派生物である（ADR-006）。以前の形は記憶ごとに
+        一つの索引しか持てず、そのまま使うと模型ごとの索引が同じ場所へ黙って
+        上書きされる。捨てれば、起動時にいまの模型で作り直される。
+        """
+        columns = self._all("PRAGMA table_info(episode_index)", ())
+        if not columns:
+            return
+        keyed = {column.text("name") for column in columns if column.number("pk") > 0}
+        if keyed != {"episode_id", "model"}:
+            _ = self._connection.execute("DROP TABLE episode_index")
 
     def close(self) -> None:
         self._connection.close()
@@ -143,16 +159,19 @@ class SqliteMemories:
     def search(
         self,
         dweller_id: str,
+        model: str,
         vector: Vector,
         limit: int,
         floor: float,
         exclude: Collection[int],
     ) -> tuple[tuple[Episode, float], ...]:
+        # 違う模型で作った索引は使わない。長さが違えば比べようとして落ち、
+        # 長さが同じなら誤った近さを黙って出す。
         rows = self._all(
             "SELECT e.*, i.vector AS vector FROM episode e"
             + " JOIN episode_index i ON i.episode_id = e.id"
-            + " WHERE e.dweller_id = ?",
-            (dweller_id,),
+            + " WHERE e.dweller_id = ? AND i.model = ?",
+            (dweller_id, model),
         )
         excluded = set(exclude)
         scored = [
@@ -202,12 +221,13 @@ class SqliteMemories:
             (dweller_id,),
         )
 
-    def episodes_without_index(self, dweller_id: str) -> tuple[Episode, ...]:
+    def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]:
+        """いまの模型の索引を持たない記憶。無視する側と同じ規則で決める。"""
         rows = self._all(
             "SELECT e.* FROM episode e"
-            + " LEFT JOIN episode_index i ON i.episode_id = e.id"
+            + " LEFT JOIN episode_index i ON i.episode_id = e.id AND i.model = ?"
             + " WHERE e.dweller_id = ? AND i.episode_id IS NULL ORDER BY e.id",
-            (dweller_id,),
+            (model, dweller_id),
         )
         return tuple(self._as_episode(row) for row in rows)
 

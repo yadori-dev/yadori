@@ -23,6 +23,14 @@ class NameNotDeclared(Exception):
         self.dweller_id: str = dweller_id
 
 
+class EmbeddingsUnavailable(Exception):
+    """埋め込みを使えない。
+
+    思い出す手順へ入る前に断る。理由には何をすればよいかを含める。記憶は
+    増やさない。
+    """
+
+
 class Memories(Protocol):
     """宿りの記憶の保存先。
 
@@ -42,6 +50,7 @@ class Memories(Protocol):
     def search(
         self,
         dweller_id: str,
+        model: str,
         vector: Vector,
         limit: int,
         floor: float,
@@ -63,7 +72,7 @@ class Memories(Protocol):
 
     def clear_index(self, dweller_id: str) -> None: ...
 
-    def episodes_without_index(self, dweller_id: str) -> tuple[Episode, ...]: ...
+    def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]: ...
 
     def record_retrieval(self, episode_ids: Collection[int], at: datetime) -> None: ...
 
