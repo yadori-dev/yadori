@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import final
 
 import pytest
@@ -114,6 +116,8 @@ class TestChangingTheModel:
             _ = broken.remember(SORA.id, "新しい話", "はい")
 
         assert memories.count_episodes(SORA.id) == kept
+        # 索引も増えていない。使えない道の索引を持つ記憶は一件も無い。
+        assert len(memories.episodes_without_index(SORA.id, "missing")) == kept
         memories.close()
 
     # IT-025-003 道を選んで測れる
@@ -130,6 +134,72 @@ class TestChangingTheModel:
         found = both.recall(SORA.id, "トマトはその後どうなりましたか").found
 
         assert found != ()
-        assert {one.by for one in found} <= {"character-pairs-v1", "reversed-characters-v1"}
+        # 両方の道から出ている。片方が空でも通る判定にしない。
+        assert {one.way for one in found} == {"character-pairs-v1", "reversed-characters-v1"}
         # 同じ記憶が二つの道で出ても、渡すのは一度だけ。
         assert len({one.episode.id for one in found}) == len(found)
+
+
+class TestOpeningAnOlderStore:
+    """以前の版が作った保存先を、いまの版で開く。"""
+
+    OLD_SCHEMA: str = """
+    CREATE TABLE dweller (id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
+        nickname TEXT NOT NULL);
+    CREATE TABLE identity (dweller_id TEXT NOT NULL REFERENCES dweller(id),
+        version INTEGER NOT NULL, text TEXT NOT NULL, PRIMARY KEY (dweller_id, version));
+    CREATE TABLE episode (id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dweller_id TEXT NOT NULL REFERENCES dweller(id), utterance TEXT NOT NULL,
+        reply TEXT NOT NULL, identity_version INTEGER NOT NULL, happened_at TEXT NOT NULL);
+    CREATE TABLE episode_index (episode_id INTEGER PRIMARY KEY REFERENCES episode(id),
+        model TEXT NOT NULL, vector TEXT NOT NULL);
+    CREATE TABLE retrieval (episode_id INTEGER NOT NULL REFERENCES episode(id),
+        at TEXT NOT NULL);
+    """
+
+    def _older(self, path: Path) -> None:
+        """以前の版の形で、記憶と索引を持つ保存先を作る。"""
+        connection = sqlite3.connect(path)
+        _ = connection.executescript(self.OLD_SCHEMA)
+        _ = connection.execute(
+            "INSERT INTO dweller VALUES (?, ?, ?, ?)",
+            (SORA.id, SORA.owner, SORA.name, SORA.nickname),
+        )
+        _ = connection.execute(
+            "INSERT INTO identity VALUES (?, 1, ?)", (SORA.id, "わたしはそらです。")
+        )
+        for utterance in KEPT:
+            cursor = connection.execute(
+                "INSERT INTO episode (dweller_id, utterance, reply, identity_version, happened_at)"
+                + " VALUES (?, ?, ?, 1, '2000-01-01T00:00:00+00:00')",
+                (SORA.id, utterance, "はい"),
+            )
+            _ = connection.execute(
+                "INSERT INTO episode_index VALUES (?, 'character-pairs-v1', '[0.0]')",
+                (cursor.lastrowid,),
+            )
+        connection.commit()
+        connection.close()
+
+    # IT-025-004 以前の形の保存先を開いても原文は残り、索引は模型ごとに持てる
+
+    def test_IT_025_004_以前の形の保存先を開くと原文は残り索引は模型ごとに持てる(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "memories.sqlite"
+        self._older(path)
+
+        memories = SqliteMemories(path)
+
+        assert memories.count_episodes(SORA.id) == len(KEPT)
+        # 以前の索引は捨てられ、いまの模型の索引を持たない記憶は全件になる。
+        assert len(memories.episodes_without_index(SORA.id, "character-pairs-v1")) == len(KEPT)
+        first = memories.recent(SORA.id, 1)[0]
+        memories.write_index(first.id, "character-pairs-v1", (1.0, 0.0))
+        memories.write_index(first.id, "reversed-characters-v1", (0.0, 1.0))
+        # 二つの模型の索引が同じ記憶に両方残る。片方が黙って上書きされない。
+        others = {episode.id for episode in memories.recent(SORA.id, 10)} - {first.id}
+        for model in ("character-pairs-v1", "reversed-characters-v1"):
+            without = {one.id for one in memories.episodes_without_index(SORA.id, model)}
+            assert without == others
+        memories.close()

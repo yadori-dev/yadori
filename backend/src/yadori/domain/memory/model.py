@@ -62,7 +62,7 @@ class Found:
     episode: Episode
     relevance: float
     retrieval: Retrieval
-    by: str
+    way: str
 
 
 @dataclass(frozen=True)

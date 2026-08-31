@@ -12,6 +12,7 @@ from typing import final
 from yadori.adapter.embedding import CharacterPairs, Multilingual
 from yadori.domain.memory import Embeddings, HowToRecall
 from yadori.infrastructure.measure import Measure
+from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
 
 USAGE = (
@@ -69,7 +70,7 @@ class Entry:
         """どの道で測るか。加算で並べると、両方の道から渡す形になる。"""
         chosen = given.pop("--embedding", None)
         if chosen is None:
-            return Multilingual()
+            return self._multilingual()
         ways = [self._one(name) for name in chosen.split("+")]
         if any(way is None for way in ways):
             return None
@@ -80,10 +81,17 @@ class Entry:
         if name == "characters":
             return CharacterPairs()
         if name == "multilingual":
-            return Multilingual()
+            return self._multilingual()
         if "/" in name:
-            return Multilingual(name)
+            return self._multilingual(name)
         return None
+
+    def _multilingual(self, model: str | None = None) -> Multilingual:
+        """会話と同じ置き場の模型で測る。取り直さない。"""
+        cache_dir = SettingsFile().models_path
+        if model is None:
+            return Multilingual(cache_dir=cache_dir)
+        return Multilingual(model, cache_dir=cache_dir)
 
     def _eval_path(self, given: dict[str, str]) -> Path | None:
         """どの評価セットを測るか。省けばリポジトリの架空のものを測る。"""

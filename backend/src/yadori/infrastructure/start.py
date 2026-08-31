@@ -15,6 +15,7 @@ from yadori.adapter.embedding import Multilingual
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.voice import ClaudeCodeVoice
+from yadori.domain.memory import EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
 
@@ -47,12 +48,14 @@ class Startup:
             turn = self._assemble(memories, settings)
             self._catch_up(turn, settings)
             Terminal(turn, settings.dweller).listen()
+        except EmbeddingsUnavailable as missing:
+            return self._refuse(missing)
         finally:
             memories.close()
         return 0
 
-    def _refuse(self, missing: NotSettled) -> int:
-        """起こせない理由を書いて、何も作らずに終わる。"""
+    def _refuse(self, missing: NotSettled | EmbeddingsUnavailable) -> int:
+        """起こせない理由を書いて、記憶を増やさずに終わる。何を用意すればよいかは理由が持つ。"""
         print(missing, file=sys.stderr)
         return 1
 
@@ -79,10 +82,11 @@ class Startup:
     def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは意味を見る実装を手元で動かす。応対の文章は、持ち主の定額
-        契約で動く対話する道具が作る。
+        埋め込みは意味を見る実装を手元で動かす。模型は宿りの置き場の下に置く。
+        応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
-        conversation = Conversation(memories, Multilingual(), self._now)
+        embeddings = Multilingual(cache_dir=settings.models_path)
+        conversation = Conversation(memories, embeddings, self._now)
         return Turn(conversation, ClaudeCodeVoice(settings.model))
 
     def _now(self) -> datetime:

@@ -39,6 +39,10 @@ class Settings:
     def memories_path(self) -> Path:
         return self.home / "memories.sqlite"
 
+    @property
+    def models_path(self) -> Path:
+        return self.home / "models"
+
 
 @final
 class SettingsFile:
@@ -46,6 +50,11 @@ class SettingsFile:
 
     def __init__(self, home: Path | None = None) -> None:
         self._home: Path = home or Path(os.environ.get("YADORI_HOME", str(DEFAULT_HOME)))
+
+    @property
+    def models_path(self) -> Path:
+        """手元で動かす模型の置き場。宿りの設定が無くても決まる。"""
+        return self._home / "models"
 
     def read(self) -> Settings:
         """設定を読む。

@@ -41,16 +41,22 @@ $ uv run python -m yadori
 
 ```console
 $ uv run python -m yadori measure
-埋め込み: paraphrase-multilingual-MiniLM-L12-v2
+埋め込み: paraphrase-multilingual-MiniLM-L12-v2/fastembed-0.8.0
+条件: 直近6往復・上限5件・下限0.5
 5件中 4件で期待したやりとりが上位3件に入った
 出てはいけないやりとりが出た件: 0件
-  満たさず: 「近い話題どうしを両方引く」期待: tomato 出ず、watering 出ず
+  満たさず: 「手続きの話を引く」期待: tax 出ず
 
-$ uv run python -m yadori measure --floor 0.30
+$ uv run python -m yadori measure --floor 0.40
 （今の条件と、下限を変えた条件の差を件ごとに出す）
+
+$ uv run python -m yadori measure --embedding characters --floor 0.21
+（語の重なりだけを見る埋め込みで測る。下限の意味は埋め込みごとに違うため、添えて指す）
 ```
 
 リポジトリの `evals/recall.toml` は架空の会話です。実際の会話から作った評価セットは手元に置き、`--eval` で指してください。架空の会話は書いた本人が話題も語も選ぶため都合よく当たり、そこで測った値は実際の会話での質を保証しません。
+
+模型は初回に取得し、`YADORI_HOME` の下の `models/` に置きます。以後は外へ繋がずに動きます。
 
 ## 何が普通のAI対話と違うか
 

@@ -41,6 +41,9 @@ class Conversation:
         self._ways: tuple[Embeddings, ...] = (
             tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
         )
+        if not self._ways:
+            # 道が無いと、原文だけ書かれて索引が作られず、思い出すと常に空になる。
+            raise ValueError("思い出す道が一つも無い")
         self._now: Callable[[], datetime] = now
         self._how: HowToRecall = how or HowToRecall()
 
@@ -148,13 +151,13 @@ class Conversation:
                     woven.append(found[place])
         return tuple(woven[: self._how.found_limit])
 
-    def _with_retrieval(self, episode: Episode, relevance: float, by: str) -> Found:
+    def _with_retrieval(self, episode: Episode, relevance: float, way: str) -> Found:
         """近さと思い出した記録を、別の値として並べる。一つの点数へ混ぜない。"""
         return Found(
             episode=episode,
             relevance=relevance,
             retrieval=self._memories.retrieval(episode.id),
-            by=by,
+            way=way,
         )
 
     def _record_retrieval(self, found: Collection[Found]) -> None:

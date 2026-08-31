@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from typing import TextIO, final
 
 from yadori.domain.conversation import CannotSpeak
-from yadori.domain.memory import Dweller
+from yadori.domain.memory import Dweller, EmbeddingsUnavailable
 from yadori.usecase.conversation import Turn
 
 
@@ -53,10 +53,14 @@ class Terminal:
             yield line.strip()
 
     def _respond(self, utterance: str) -> None:
-        """一往復を通す。応対を作れなければ理由を書き、覚えさせない。"""
+        """一往復を通す。応対を作れなければ理由を書き、覚えさせない。
+
+        埋め込みが使えないときも同じで、何を導入すればよいかをそのまま書く。
+        導入の面倒はここでは見ない。
+        """
         try:
             response = self._turn.respond_to(self._dweller.id, utterance)
-        except CannotSpeak as reason:
+        except (CannotSpeak, EmbeddingsUnavailable) as reason:
             self._say(f"（応対できませんでした: {reason}）")
             return
         self._say(f"{self._dweller.nickname}: {response.reply}")
