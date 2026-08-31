@@ -701,12 +701,17 @@ class _Call:
         return "[]"
 
 
+def _fixed_version(name: str) -> str:
+    del name
+    return "0.8.0"
+
+
 class TestIT037007:
     def test_IT_037_007_口が答える値の形(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # 道具の版は導入されたものから読む。ここでは版だけを差し替え、AIモデルは読み込まない。
-        monkeypatch.setattr(multilingual_module, "version", lambda name: "0.8.0")  # pyright: ignore[reportUnknownLambdaType]
+        monkeypatch.setattr(multilingual_module, "version", _fixed_version)
         meaning = Multilingual().provenance
         assert meaning == Provenance("paraphrase-multilingual-MiniLM-L12-v2", "fastembed", "0.8.0")
         assert Multilingual().name == meaning.index_name

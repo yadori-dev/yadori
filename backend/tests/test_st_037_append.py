@@ -273,7 +273,7 @@ class TestST037003:
         assert "注意: 埋め込みを動かす道具の版が前回（character-pairs-v1）と違います" in written
         assert MOVIE_AGAIN in utterances(out, "case")
         drawn = covered_of(out)["drawn_with"]
-        assert isinstance(drawn, dict) and drawn["tool_version"] == "v2"  # pyright: ignore[reportUnknownMemberType]
+        assert isinstance(drawn, dict) and drawn["tool_version"] == "v2"
 
 
 class TestST037004:
