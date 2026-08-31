@@ -44,11 +44,13 @@ class Measuring:
         """その条件で全件を測る。
 
         - 指す先が揃っているか確かめる
+        - 確認前の件が無いか確かめる
         - 使い捨ての記憶へやりとりを入れる
         - 索引が揃っているか確かめる
         - 件ごとに思い出して順位を取る
         """
         self._check_pointing()
+        self._check_confirmed()
         kept = self._filled()
         self._check_indexed(kept)
         conversation = Conversation(kept, self._embeddings, self._clock(), how)
@@ -58,17 +60,20 @@ class Measuring:
         )
 
     def _check_pointing(self) -> None:
-        """件が指すやりとりが、評価セットの中に在ることを確かめる。"""
-        known = {exchange.name for exchange in self._eval.exchanges}
-        for case in self._eval.cases:
-            unknown = sorted((set(case.expected) | set(case.forbidden)) - known)
-            if unknown:
-                raise CannotMeasure(f"件「{case.name}」が無いやりとりを指している: {unknown}")
-            both = sorted(set(case.expected) & set(case.forbidden))
-            if both:
-                raise CannotMeasure(
-                    f"件「{case.name}」が同じやりとりを期待と禁止に指している: {both}"
-                )
+        """件が指すやりとりが評価セットの中に在り、名前が重なっていないことを確かめる。"""
+        self._eval.verify_pointing()
+
+    def _check_confirmed(self) -> None:
+        """人が確かめていない件が無いことを確かめる。
+
+        下書きから作った件は確認前の印を持つ。確かめていない期待を測ると、
+        判定した側の癖がそのまま思い出す質の値になる。
+        """
+        if self._eval.unconfirmed:
+            raise CannotMeasure(
+                f"確認していない件が {self._eval.unconfirmed} 件あります。"
+                + "各件を読み、残す件は confirmed = true にしてください"
+            )
 
     def _filled(self) -> Memories:
         """使い捨ての記憶へ、評価セットのやりとりを順に入れる。"""
