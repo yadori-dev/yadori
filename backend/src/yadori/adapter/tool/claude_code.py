@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 from typing import final
 
 # その道具が普段持ち込むものを外す。どれか一つでも欠けると混ざる。
@@ -21,11 +22,24 @@ class ToolCallFailed(Exception):
     """道具を呼べなかった、または返事を読めなかった。呼ぶ側が自分の失敗へ言い換える。"""
 
 
+class TooLongForTool(ToolCallFailed):
+    """渡した文章が道具の受け付ける大きさを超えた。渡す量を減らせば通る。"""
+
+
+class ToolLimitReached(ToolCallFailed):
+    """利用の上限に当たった。時間を置くか、契約を確かめる。"""
+
+
+TOO_LONG_SIGNS = ("prompt is too long", "too long", "context length")
+LIMIT_SIGNS = ("usage limit", "rate limit", "limit reached", "上限")
+
+
 @final
 class ClaudeCodeCall:
     def __init__(self, model: str, wait_seconds: int) -> None:
         self._model: str = model
         self._wait_seconds: int = wait_seconds
+        self._empty_dir: str | None = None
 
     def ask(self, preface: str, spoken: str) -> str:
         """前置きと文章を渡し、返事の文章だけを受け取る。"""
@@ -51,12 +65,40 @@ class ClaudeCodeCall:
                 text=True,
                 timeout=self._wait_seconds,
                 check=False,
+                # 作業ディレクトリの状態（変更したファイルの一覧など）が文脈として混ざるため、
+                # 何も無い一時ディレクトリで呼ぶ。
+                cwd=self._nowhere(),
             )
         except (OSError, subprocess.TimeoutExpired) as trouble:
             raise ToolCallFailed(f"対話する道具を呼べなかった: {trouble}") from trouble
         if done.returncode != 0:
-            raise ToolCallFailed(f"対話する道具が失敗した: {done.stderr.strip()[:200]}")
+            reason = self._reason(done)
+            lowered = reason.lower()
+            if any(sign in lowered for sign in TOO_LONG_SIGNS):
+                raise TooLongForTool(f"対話する道具が受け付けない大きさだった: {reason}")
+            if any(sign in lowered for sign in LIMIT_SIGNS):
+                raise ToolLimitReached(f"対話する道具の利用の上限に当たった: {reason}")
+            raise ToolCallFailed(f"対話する道具が失敗した: {reason}")
         return done.stdout
+
+    def _reason(self, done: subprocess.CompletedProcess[str]) -> str:
+        """失敗の理由。道具は標準エラーに書かず、返した記録の中に理由を置くことがある。"""
+        if done.stderr.strip():
+            return done.stderr.strip()[:300]
+        try:
+            answered: object = json.loads(done.stdout)  # pyright: ignore[reportAny]
+        except json.JSONDecodeError:
+            return done.stdout.strip()[:300] or f"終了状態 {done.returncode}"
+        if isinstance(answered, dict):
+            result: object = answered.get("result")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            if isinstance(result, str) and result.strip():
+                return result.strip()[:300]
+        return done.stdout.strip()[:300]
+
+    def _nowhere(self) -> str:
+        if self._empty_dir is None:
+            self._empty_dir = tempfile.mkdtemp(prefix="yadori-call-")
+        return self._empty_dir
 
     def _as_reply(self, written: str) -> str:
         """道具の返した記録から、返事の文章だけを取り出す。"""

@@ -19,6 +19,7 @@ from tests.records import (
     FixedJudge,
     claude_code_lines,
     claude_code_noise,
+    claude_code_tool_turn,
     codex_lines,
     codex_noise,
     names_of,
@@ -42,6 +43,7 @@ PLANTS = "植物の世話について教えてください"
 FERTILIZER = "庭の野菜に肥料をあげる時期はいつですか"
 NOD = "いいよ"
 POINTING = "それ、どうなった？"
+PASTED = "エラーの記録を貼ります。\n" + "\n".join(f"行 {n}: 処理に失敗しました" for n in range(60))
 FILLERS = [
     "新しい鍵盤楽器が届きました",
     "洗濯物がよく乾きました",
@@ -58,7 +60,13 @@ SAFE = {PLANTS: [TOMATO]}
 def _place(tmp_path: Path) -> Path:
     """二つの形式の記録と雑音を置いた置き場。"""
     place = tmp_path / "records"
-    turns = [(TOMATO, "いいですね"), (NOD, "はい"), (TAX, "期限をお忘れなく"), (POINTING, "はい")]
+    turns = [
+        (TOMATO, "いいですね"),
+        (NOD, "はい"),
+        (TAX, "期限をお忘れなく"),
+        (POINTING, "はい"),
+        (PASTED, "見ました"),
+    ]
     _ = write(place / "claude", "a.jsonl", claude_code_lines("s1", WORKSPACE, turns))
     _ = write(place / "claude", "noise.jsonl", claude_code_noise("s2", WORKSPACE, minute=30))
     codex_turns = [(WATERING, "朝がおすすめです"), (BOOKS, "楽しみですね"), (TOMATO, "重複です")]
@@ -69,6 +77,11 @@ def _place(tmp_path: Path) -> Path:
     later = [(PLANTS, "トマトの件ですね")] + [(one, "はい") for one in FILLERS]
     _ = write(
         place / "claude", "d.jsonl", claude_code_lines("s4", WORKSPACE, later, first_minute=60)
+    )
+    _ = write(
+        place / "claude",
+        "e.jsonl",
+        claude_code_tool_turn("s4", WORKSPACE, MOVIE, "調べました。古い名作ですね", minute=90),
     )
     return place
 
@@ -106,24 +119,36 @@ class TestST030001:
         code, written, _ = _draft(_place(tmp_path), out, FixedJudge(SAFE))
 
         assert code == 0
-        spoken = _utterances(_read(out), "exchange")
+        loaded = _read(out)
+        spoken = _utterances(loaded, "exchange")
         assert spoken[:4] == [TOMATO, TAX, WATERING, BOOKS]
-        assert NOD not in spoken and POINTING not in spoken
-        assert not any("<" in one or "[Request" in one for one in spoken)
+        assert NOD not in spoken and POINTING not in spoken and PASTED not in spoken
+        assert not any("<" in one or "[Request" in one or "検査役" in one for one in spoken)
         assert spoken.count(TOMATO) == 1
+        replies = {
+            text_of(row, "utterance"): text_of(row, "reply") for row in rows_of(loaded, "exchange")
+        }
+        assert replies[MOVIE] == "調べました。古い名作ですね"
         assert "飛ばしたファイル 0" in written
 
-    def test_ST_030_001_切れたファイルは飛ばされ数が出る(self, tmp_path: Path) -> None:
+    def test_ST_030_001_切れたファイルと時刻の壊れたファイルは飛ばされ数が出る(
+        self, tmp_path: Path
+    ) -> None:
         place = _place(tmp_path)
-        broken = claude_code_lines("s9", WORKSPACE, [(MOVIE, "はい")], first_minute=200)
+        broken = claude_code_lines("s9", WORKSPACE, [(FERTILIZER, "はい")], first_minute=200)
         _ = write(place / "claude", "broken.jsonl", broken + '{"type": "user", "sessionId": "s9"\n')
+        bad_time = claude_code_lines("s8", WORKSPACE, [(BOOKS + "か", "はい")]).replace(
+            "2026-01-01T09:00:00.000Z", "いつか"
+        )
+        _ = write(place / "claude", "badtime.jsonl", bad_time)
         out = _out(tmp_path)
 
         code, written, _ = _draft(place, out, FixedJudge(SAFE))
 
         assert code == 0
-        assert MOVIE not in _utterances(_read(out), "exchange")
-        assert "飛ばしたファイル 1" in written
+        spoken = _utterances(_read(out), "exchange")
+        assert FERTILIZER not in spoken and BOOKS + "か" not in spoken
+        assert "飛ばしたファイル 2" in written
 
     @pytest.mark.parametrize("missing", [True, False])
     def test_ST_030_001_空と無い置き場では何も書かれず理由が返る(
@@ -154,7 +179,9 @@ class TestST030002:
     def test_ST_030_002_指すと判定された発話は件になり期待に前の発話が入る(
         self, tmp_path: Path
     ) -> None:
-        loaded = self._drafted(tmp_path, FixedJudge({PLANTS: [TOMATO, WATERING], MOVIE: [TAX]}))
+        loaded = self._drafted(
+            tmp_path, FixedJudge({PLANTS: [TOMATO, WATERING], FERTILIZER: [TAX]})
+        )
 
         cases = rows_of(loaded, "case")
         assert len(cases) == 1
@@ -326,8 +353,8 @@ class TestST030004:
             for row in rows_of(_read(out), "exchange")
         }
         assert pairs >= {(TOMATO, "いいですね"), (WATERING, "朝がおすすめです")}
-        assert "記録: 3 セッション、中身のある発話 12 件（読めず飛ばしたファイル 0）" in written
-        assert "覚えさせる発話: 11 件" in written
+        assert "記録: 3 セッション、中身のある発話 13 件（読めず飛ばしたファイル 0）" in written
+        assert "覚えさせる発話: 12 件" in written
         assert "件: 1 件" in written and "すべて確認前" in written
         assert "confirmed = true にしてください" in written
 
@@ -361,22 +388,12 @@ class TestST030007:
 
 
 class TestST030008:
-    @pytest.mark.parametrize(
-        "reason",
-        [
-            "対話する道具を呼べなかった",
-            "途中で失敗した",
-            "利用の上限に当たった",
-            "大きすぎて受け付けられなかった。置き場を絞って指し直すと通ることがあります",
-        ],
-    )
-    def test_ST_030_008_判定が続かなければ何も書かず理由が返る(
-        self, tmp_path: Path, reason: str
-    ) -> None:
+    def test_ST_030_008_判定が続かなければ何も書かず理由が返る(self, tmp_path: Path) -> None:
+        # 失敗の種類ごとの言い分けは、判定の実装に当てる IT-030-007 が確かめる。
         out = _out(tmp_path)
 
-        code, written, errors = _draft(_place(tmp_path), out, FailingJudge(reason))
+        code, written, errors = _draft(_place(tmp_path), out, FailingJudge("上限に当たった"))
 
         assert code == 1 and written == ""
-        assert reason in errors
+        assert "上限に当たった" in errors
         assert not out.exists()

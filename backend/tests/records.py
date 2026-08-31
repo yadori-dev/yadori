@@ -55,9 +55,57 @@ def claude_code_lines(
     return "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
 
 
-def claude_code_noise(session: str, workspace: str, *, minute: int) -> str:
-    """Claude Code の形に混ざる雑音。命令、道具の結果、画像だけ、割り込み。"""
+def claude_code_tool_turn(
+    session: str, workspace: str, spoken: str, reply: str, *, minute: int
+) -> str:
+    """道具を使ってから答える一往復。道具の結果は user の行として記録される。"""
     rows: list[dict[str, object]] = [
+        {
+            "type": "user",
+            "sessionId": session,
+            "cwd": workspace,
+            "timestamp": _at(minute),
+            "message": {"role": "user", "content": spoken},
+        },
+        {
+            "type": "assistant",
+            "sessionId": session,
+            "cwd": workspace,
+            "timestamp": _at(minute + 1),
+            "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Read"}]},
+        },
+        {
+            "type": "user",
+            "sessionId": session,
+            "cwd": workspace,
+            "timestamp": _at(minute + 2),
+            "message": {"role": "user", "content": [{"type": "tool_result", "content": "..."}]},
+        },
+        {
+            "type": "assistant",
+            "sessionId": session,
+            "cwd": workspace,
+            "timestamp": _at(minute + 3),
+            "message": {"role": "assistant", "content": [{"type": "text", "text": reply}]},
+        },
+    ]
+    return "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n"
+
+
+def claude_code_noise(session: str, workspace: str, *, minute: int) -> str:
+    """Claude Code の形に混ざる雑音。命令、道具の結果、画像、割り込み、子エージェントへの指示。"""
+    rows: list[dict[str, object]] = [
+        {
+            "type": "user",
+            "sessionId": session,
+            "cwd": workspace,
+            "isSidechain": True,
+            "timestamp": _at(minute - 1),
+            "message": {
+                "role": "user",
+                "content": "あなたは検査役です。次の差分を読んで指摘を重大度順に並べてください。",
+            },
+        },
         {
             "type": "user",
             "sessionId": session,

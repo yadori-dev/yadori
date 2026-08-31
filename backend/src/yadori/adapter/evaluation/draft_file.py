@@ -69,5 +69,6 @@ class DraftFile:
         ]
 
     def _quoted(self, text: str) -> str:
-        # JSON の文字列の書き方は TOML の基本文字列としてそのまま読める。
-        return json.dumps(text, ensure_ascii=False)
+        # JSON の文字列の書き方は TOML の基本文字列としてそのまま読める。ただし DEL（U+007F）
+        # だけは JSON が素通しし TOML が禁じるため、逃がす。
+        return json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")

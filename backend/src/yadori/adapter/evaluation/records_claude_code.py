@@ -81,7 +81,8 @@ class ClaudeCodeRecords:
 
     def _utterance(self, row: dict[str, object]) -> str | None:
         """利用者の発話の文章。道具の結果や雑音を含む行は発話としない。"""
-        if row.get("type") != "user" or row.get("isMeta"):
+        # 子エージェントへ渡した指示（isSidechain）は道具が作った文章で、利用者の発話ではない。
+        if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain"):
             return None
         text = self._text_of(row.get("message"), allow_tool_result=False)
         if text is None:
@@ -91,8 +92,10 @@ class ClaudeCodeRecords:
         return text
 
     def _reply_after(self, rows: list[dict[str, object]], index: int) -> str:
+        """直後の返事。道具の結果は `user` の行として記録されるが、利用者の発話ではないので
+        そこで打ち切らず、次の本物の発話まで読む。"""
         for row in rows[index + 1 :]:
-            if row.get("type") == "user":
+            if self._utterance(row) is not None:
                 return ""
             if row.get("type") == "assistant":
                 text = self._text_of(row.get("message"), allow_tool_result=True)
@@ -126,4 +129,7 @@ class ClaudeCodeRecords:
         written = row.get("timestamp")
         if not isinstance(written, str):
             raise BrokenRecord("時刻が無い")
-        return datetime.fromisoformat(written.replace("Z", "+00:00")).astimezone(UTC)
+        try:
+            return datetime.fromisoformat(written.replace("Z", "+00:00")).astimezone(UTC)
+        except ValueError as broken:
+            raise BrokenRecord(f"時刻が読めない: {written!r}") from broken

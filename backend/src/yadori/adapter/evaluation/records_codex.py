@@ -124,4 +124,7 @@ class CodexRecords:
         written = row.get("timestamp")
         if not isinstance(written, str):
             raise BrokenRecord("時刻が無い")
-        return datetime.fromisoformat(written.replace("Z", "+00:00")).astimezone(UTC)
+        try:
+            return datetime.fromisoformat(written.replace("Z", "+00:00")).astimezone(UTC)
+        except ValueError as broken:
+            raise BrokenRecord(f"時刻が読めない: {written!r}") from broken

@@ -33,6 +33,7 @@ from yadori.adapter.evaluation import (
     EvalFile,
 )
 from yadori.adapter.store import InMemoryMemories
+from yadori.adapter.tool import ToolCallFailed, ToolLimitReached, TooLongForTool
 from yadori.domain.evaluation import (
     CannotDraft,
     CannotMeasure,
@@ -350,13 +351,19 @@ class TestIT030007:
             '[{"later": 3, "earlier": [9]}]',
             '[{"later": 1, "earlier": [3]}]',
             "組は無いと思います",
-            RuntimeError("対話する道具が失敗した: usage limit reached"),
-            RuntimeError("対話する道具が失敗した: prompt is too long"),
+            ToolCallFailed("対話する道具を呼べなかった"),
+            ToolLimitReached("利用の上限に当たった"),
+            TooLongForTool("受け付けない大きさだった"),
         ]
         for answer in bad_answers:
             with pytest.raises(CannotDraft):
                 _ = ClaudeCodeJudge(_RecordingCall(answer)).pairs(utterances)
+        # 置き場を絞る助言は、大きすぎたときだけに付く。
         with pytest.raises(CannotDraft, match="置き場を絞って"):
-            _ = ClaudeCodeJudge(_RecordingCall(RuntimeError("prompt is too long"))).pairs(
-                utterances
-            )
+            _ = ClaudeCodeJudge(_RecordingCall(TooLongForTool("大きすぎ"))).pairs(utterances)
+        with pytest.raises(CannotDraft) as refused:
+            _ = ClaudeCodeJudge(_RecordingCall(ToolCallFailed("呼べない"))).pairs(utterances)
+        assert "置き場を絞って" not in str(refused.value)
+        # こちら側の不具合は言い換えずに伝わる。
+        with pytest.raises(RuntimeError):
+            _ = ClaudeCodeJudge(_RecordingCall(RuntimeError("こわれた"))).pairs(utterances)

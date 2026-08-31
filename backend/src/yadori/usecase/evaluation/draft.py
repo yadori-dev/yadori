@@ -77,6 +77,10 @@ class Drafting:
         recorded: list[Recorded] = []
         skipped = 0
         for place in places:
+            if place.is_file():
+                raise CannotDraft(
+                    f"記録の置き場 {place} はファイルです。ディレクトリを指してください"
+                )
             if not place.is_dir():
                 raise CannotDraft(f"記録の置き場 {place} がありません")
             for path in sorted(place.rglob("*.jsonl")):

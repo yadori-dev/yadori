@@ -13,6 +13,7 @@ import re
 from collections.abc import Sequence
 from typing import Protocol, final
 
+from yadori.adapter.tool import ToolCallFailed, TooLongForTool
 from yadori.domain.evaluation import CannotDraft, Pair
 
 PREFACE = (
@@ -52,11 +53,16 @@ class ClaudeCodeJudge:
         return self._as_pairs(answered, len(utterances))
 
     def _asked(self, utterances: Sequence[str]) -> str:
-        numbered = "\n".join(f"{number}: {text}" for number, text in enumerate(utterances, start=1))
+        # 改行を潰して一発話を一行にする。全文を渡す。先頭だけにすると前置きで話題が消える。
+        numbered = "\n".join(
+            f"{number}: {' '.join(text.split())}" for number, text in enumerate(utterances, start=1)
+        )
         try:
             return self._call.ask(PREFACE, ASKING + numbered)
-        except Exception as trouble:
+        except TooLongForTool as trouble:
             raise CannotDraft(f"判定を続けられません: {trouble}{NARROW_HINT}") from trouble
+        except ToolCallFailed as trouble:
+            raise CannotDraft(f"判定を続けられません: {trouble}") from trouble
 
     def _as_pairs(self, answered: str, count: int) -> tuple[Pair, ...]:
         try:
