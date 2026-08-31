@@ -129,12 +129,12 @@ class DraftFile:
 
     def _names_in(self, path: Path, text: str) -> set[tuple[str, str]]:
         try:
-            written = tomllib.loads(text)
+            written: dict[str, object] = tomllib.loads(text)
         except tomllib.TOMLDecodeError as broken:
             raise CannotDraft(f"{path} を評価セットとして読めません: {broken}") from broken
         found: set[tuple[str, str]] = set()
         for key in ("exchange", "case"):
-            rows: object = written.get(key, [])
+            rows = written.get(key, [])
             if not isinstance(rows, list):
                 raise CannotDraft(f"{path} の {key} の書き方が違います")
             for row in rows:  # pyright: ignore[reportUnknownVariableType]
