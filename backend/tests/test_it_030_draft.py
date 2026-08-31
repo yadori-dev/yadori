@@ -336,6 +336,22 @@ class TestIT030004:
             _ = Measuring(loaded, InMemoryMemories, CharacterPairs()).at(HowToRecall())
 
 
+@final
+class _CountingRecords:
+    """読んだ回数を数える読み手。境界の外へ向けた手順が記録を読まないことを確かめる。"""
+
+    def __init__(self) -> None:
+        self._inner: ClaudeCodeRecords = ClaudeCodeRecords()
+        self.claimed: int = 0
+
+    def claims(self, path: Path) -> bool:
+        self.claimed += 1
+        return self._inner.claims(path)
+
+    def read(self, path: Path) -> tuple[Recorded, ...]:
+        return self._inner.read(path)
+
+
 class TestIT030005:
     def _eval(self) -> RecallEval:
         return RecallEval(
@@ -369,6 +385,16 @@ class TestIT030005:
         place = tmp_path / "records"
         _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
         _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
+        # 境界の外へ向けた手順は、記録を読む前（判定を呼ぶ前）に断る。
+        counting = _CountingRecords()
+        judge = FixedJudge({A2: [A]})
+        for bad in (repo / "d.toml", existing, directory):
+            with pytest.raises(CannotDraft):
+                _ = Drafting(
+                    [counting], judge, DraftFile(), CharacterPairs(), InMemoryMemories, HOW
+                ).run([place], bad)
+        assert counting.claimed == 0 and judge.askings == []
+        assert existing.read_text(encoding="utf-8") == "x"
         out = tmp_path / "never.toml"
         with pytest.raises(CannotDraft):
             _ = _drafting(FailingJudge("途中で失敗")).run([place], out)

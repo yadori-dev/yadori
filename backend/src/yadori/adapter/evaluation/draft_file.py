@@ -51,12 +51,16 @@ NOT_APPENDABLE = "前回の範囲を持たないので追記できません。�
 
 @final
 class DraftFile:
-    def write(self, path: Path, recall_eval: RecallEval, covered: Covered) -> None:
+    def verify_writable(self, path: Path) -> None:
+        """新しく書ける先か。書く直前にも通す。先に確かめても、その間に作られたファイルを踏み得る。"""
         self._refuse_outside(path)
         if path.exists():
             raise CannotDraft(f"出力先 {path} は既にあります。人の確認を消さないため上書きしません")
         if not path.parent.is_dir():
             raise CannotDraft(f"出力先のディレクトリ {path.parent} がありません")
+
+    def write(self, path: Path, recall_eval: RecallEval, covered: Covered) -> None:
+        self.verify_writable(path)
         lines = [
             HEADING,
             f"within = {recall_eval.within}",

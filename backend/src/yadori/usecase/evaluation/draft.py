@@ -142,6 +142,7 @@ class Drafting:
     def run(self, places: Sequence[Path], out: Path) -> Draft:
         """記録から下書きを作って書く。
 
+        - 書ける先かを確かめる（判定を全部走らせた後に断るのは遅い）
         - 記録を読む（形式ごとの読み手。読めないファイルは飛ばして残す）
         - 中身のある一往復に絞り、同じ文言を最初の一つにする（この数を中身のある発話とする）
         - 作業場所ごとに、思い出して候補を引きながら覚えさせる
@@ -149,6 +150,7 @@ class Drafting:
         - 組を解いて評価セットに組む
         - 指す先が揃っていることを確かめてから書く
         """
+        self._drafts.verify_writable(out)
         recorded, skipped = self._recorded(places)
         incoming = self._incoming([one for _, one in recorded], _EMPTY)
         resolved, _, _ = self._drawn(_EMPTY, recorded, incoming)

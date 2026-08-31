@@ -42,8 +42,11 @@ class Drafts(Protocol):
     `CannotDraft` を投げる。
 
     前回の範囲（`Covered`）を下書きの中に残す。後から比べるためと、追記がそこから
-    読むために要る。追記は前回の分を一字も変えない。
+    読むために要る。追記は前回の分を一字も変えない。新しく書く先が境界の内か、
+    既に無いかは、記録を読む前に確かめる。判定を全部走らせた後に断るのは遅い。
     """
+
+    def verify_writable(self, path: Path) -> None: ...
 
     def write(self, path: Path, recall_eval: RecallEval, covered: Covered) -> None: ...
 
