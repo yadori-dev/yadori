@@ -32,7 +32,7 @@ from tests.records import (
 )
 from yadori.adapter.embedding import CharacterPairs
 from yadori.domain.evaluation import Judge
-from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Vector
+from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Provenance, Vector
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.entry import USAGE
 from yadori.infrastructure.measure import Measure
@@ -302,6 +302,8 @@ class TestST030002:
         assert code == 0, errors
         assert MOVIE in {c for a in judge.askings if a.utterance == near for c in a.candidates}
         assert _utterances(_read(out), "case") == [far1, far2]
+        # 問にならなかった発話は覚えさせる側に残り、下書きから消えない。
+        assert near in _utterances(_read(out), "exchange")
 
 
 class TestST030003:
@@ -421,7 +423,8 @@ class TestST030004:
         }
         assert pairs >= {(TOMATO, "いいですね"), (WATERING, "朝がおすすめです")}
         assert (
-            "候補を引いた 埋め込み: character-pairs-v1 / 条件: 直近2往復・候補10件・下限0.15"
+            "候補を引いた 埋め込み: AIモデル無し（character-pairs-v1） / 条件: "
+            + "直近2往復・候補10件・下限0.15 / 判定: fixed-judge"
             in written
         )
         assert "記録: 3 セッション、中身のある発話 18 件（読めず飛ばしたファイル 0）" in written
@@ -429,7 +432,8 @@ class TestST030004:
         assert "問: 1 問" in written and "すべて確認前" in written
         assert "confirmed = true にしてください" in written
         assert "手で足せます" in written and "直近の範囲の組は測れないので足しません" in written
-        assert "# 候補を引いた 埋め込み: character-pairs-v1" in out.read_text(encoding="utf-8")
+        text = out.read_text(encoding="utf-8")
+        assert "[covered]" in text and 'tool = "character-pairs"' in text and "ai_model" not in text
 
     def test_ST_030_004_同じ出力先へもう一度作ると上書きしない(self, tmp_path: Path) -> None:
         out = _out(tmp_path)
@@ -453,8 +457,12 @@ class TestST030004:
 
 class _Unavailable:
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="unavailable", tool_version="v0")
+
+    @property
     def name(self) -> str:
-        return "unavailable"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         del text

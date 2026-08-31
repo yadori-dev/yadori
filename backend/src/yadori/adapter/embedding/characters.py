@@ -14,7 +14,7 @@ import zlib
 from collections import Counter
 from typing import final
 
-from yadori.domain.memory import Vector
+from yadori.domain.memory import Provenance, Vector
 
 _DIMENSIONS = 512
 
@@ -22,8 +22,12 @@ _DIMENSIONS = 512
 @final
 class CharacterPairs:
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="character-pairs", tool_version="v1")
+
+    @property
     def name(self) -> str:
-        return "character-pairs-v1"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         counts: Counter[int] = Counter()

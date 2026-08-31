@@ -12,6 +12,30 @@ Vector = tuple[float, ...]
 
 
 @dataclass(frozen=True)
+class Provenance:
+    """埋め込みの出自。何で作られたか。
+
+    AIモデルの名前（AIを使わなければ無し）と、動かした道具の名前と版。インデックスの
+    名前はここから組む。規則を各実装が持つと片方だけ変わって名前が黙ってずれるため、
+    ここが一箇所で持つ。
+    """
+
+    ai_model: str | None
+    tool: str
+    tool_version: str
+
+    @property
+    def index_name(self) -> str:
+        tooling = f"{self.tool}-{self.tool_version}"
+        return tooling if self.ai_model is None else f"{self.ai_model}/{tooling}"
+
+    @property
+    def described(self) -> str:
+        """人が読む形。AIモデルの名前と、括弧で道具の名前と版。"""
+        return f"{self.ai_model or 'AIモデル無し'}（{self.tool}-{self.tool_version}）"
+
+
+@dataclass(frozen=True)
 class Dweller:
     """宿り。名前を持つ一人ぶんの存在で、記憶と状態はすべてここに属する。"""
 

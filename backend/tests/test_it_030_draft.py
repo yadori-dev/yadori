@@ -14,6 +14,7 @@ import pytest
 
 from tests.records import (
     OTHER_WORKSPACE,
+    START,
     TEST_HOW,
     WORKSPACE,
     FailingJudge,
@@ -40,11 +41,13 @@ from yadori.domain.evaluation import (
     CannotDraft,
     CannotMeasure,
     Case,
+    Covered,
+    DrawnWith,
     Exchange,
     RecallEval,
     Recorded,
 )
-from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Vector
+from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Provenance, Vector
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.entry import USAGE, Entry
 from yadori.usecase.evaluation import Drafting, Measuring
@@ -58,6 +61,17 @@ A2 = "トマトの苗はその後どうなりましたか"  # A を指す（文�
 B2 = "水やりは朝がいいと聞きましたが本当ですか"  # B を指す
 B3 = "朝の水やりの話の続きですが肥料も要りますか"  # B2 を指す（連鎖）
 HOW = HowToRecall(recent_turns=1, found_limit=5, relevance_floor=0.21)
+COVERED = Covered(
+    until=START,
+    places=(),
+    skipped=(),
+    sessions=1,
+    last_exchange=1,
+    last_case=1,
+    drawn_with=DrawnWith(
+        provenance=Provenance(ai_model=None, tool="x", tool_version="y"), how=HOW, judge="j"
+    ),
+)
 
 TURNS = [
     (A, "いいですね"),
@@ -115,7 +129,7 @@ class TestIT030001:
         # 短い相槌は読み手からは返り、中身が無いと自分で答える。除くのは手順の側。
         nods = [one for one in from_claude if one.utterance == NOD]
         assert nods and not nods[0].has_substance()
-        assert draft.skipped_files == 2
+        assert sorted(Path(one).name for one in draft.skipped) == ["broken.jsonl", "unknown.jsonl"]
 
 
 @final
@@ -123,8 +137,12 @@ class _FirstCharacter:
     """先頭の文字だけを見る別の埋め込み。同じ文でも候補が変わる。"""
 
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="first-character", tool_version="v1")
+
+    @property
     def name(self) -> str:
-        return "first-character-v1"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         code = ord(text[0]) if text else 0
@@ -134,8 +152,12 @@ class _FirstCharacter:
 @final
 class _Unavailable:
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="unavailable", tool_version="v0")
+
+    @property
     def name(self) -> str:
-        return "unavailable"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         del text
@@ -302,6 +324,17 @@ class TestIT030004:
         _ = path.write_text(text, encoding="utf-8")
         assert EvalFile(path).read().cases[0].confirmed is False
 
+    def test_IT_030_004_問の無い評価セットは読み手が読み測る側が断る(self, tmp_path: Path) -> None:
+        empty = tmp_path / "empty.toml"
+        _ = empty.write_text(
+            'within = 3\n\n[[exchange]]\nname = "a"\nutterance = "x"\nreply = "y"\n',
+            encoding="utf-8",
+        )
+        loaded = EvalFile(empty).read()
+        assert loaded.cases == ()
+        with pytest.raises(CannotMeasure, match="問が一つもありません"):
+            _ = Measuring(loaded, InMemoryMemories, CharacterPairs()).at(HowToRecall())
+
 
 class TestIT030005:
     def _eval(self) -> RecallEval:
@@ -324,13 +357,14 @@ class TestIT030005:
 
         for bad in (repo / "d.toml", existing, directory):
             with pytest.raises(CannotDraft):
-                DraftFile().write(bad, self._eval(), "埋め込み: x / 条件: y")
+                DraftFile().write(bad, self._eval(), COVERED)
         assert existing.read_text(encoding="utf-8") == "x"
-        DraftFile().write(fresh, self._eval(), "埋め込み: x / 条件: y")
+        DraftFile().write(fresh, self._eval(), COVERED)
         loaded = EvalFile(fresh).read()
         assert loaded.exchanges[0] == Exchange("a", A, "いいですね")
         assert loaded.cases[0].utterance == A2
-        assert "# 候補を引いた 埋め込み: x / 条件: y" in fresh.read_text(encoding="utf-8")
+        text = fresh.read_text(encoding="utf-8")
+        assert "[covered]" in text and 'tool = "x"' in text and "候補を引いた" not in text
 
         place = tmp_path / "records"
         _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
@@ -393,7 +427,10 @@ class TestIT030006:
             sys.stderr = real
         lines = written.getvalue().splitlines()
         assert code == 0 and len(lines) == 6
-        assert lines[0].startswith("候補を引いた 埋め込み: character-pairs-v1 / 条件: ")
+        assert lines[0] == (
+            "候補を引いた 埋め込み: AIモデル無し（character-pairs-v1） / 条件: "
+            + "直近2往復・候補10件・下限0.15 / 判定: fixed-judge"
+        )
         assert "記録: 2 セッション、中身のある発話 13 件（読めず飛ばしたファイル 0）" in lines[1]
         assert "覚えさせる発話: 12 件" in lines[2] and "問: 1 問" in lines[3]
         assert "手で足せます" in lines[5]
@@ -410,6 +447,10 @@ class _RecordingCall:
     def __init__(self, answer: str | Exception) -> None:
         self._answer: str | Exception = answer
         self.sent: list[tuple[str, str]] = []
+
+    @property
+    def model(self) -> str:
+        return "recorded-model"
 
     def ask(self, preface: str, spoken: str) -> str:
         self.sent.append((preface, spoken))

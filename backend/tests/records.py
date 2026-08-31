@@ -226,9 +226,14 @@ class FixedJudge:
     渡された問い（発話と候補）を記録する。候補に無い前の発話は組にできない。
     """
 
-    def __init__(self, pointing: Mapping[str, Sequence[str]]) -> None:
+    def __init__(self, pointing: Mapping[str, Sequence[str]], name: str = "fixed-judge") -> None:
         self._pointing: Mapping[str, Sequence[str]] = pointing
+        self._name: str = name
         self.askings: list[Asking] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
 
     def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
         self.askings.extend(askings)
@@ -242,8 +247,14 @@ class FixedJudge:
 
 @final
 class FailingJudge:
+    """必ず失敗する判定。名前は答えを固定した判定と同じにし、引き方の違いで断られないようにする。"""
+
     def __init__(self, reason: str) -> None:
         self._reason: str = reason
+
+    @property
+    def name(self) -> str:
+        return "fixed-judge"
 
     def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
         del askings

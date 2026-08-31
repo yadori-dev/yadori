@@ -15,7 +15,7 @@ import pytest
 
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.store import InMemoryMemories, SqliteMemories
-from yadori.domain.memory import Dweller, EmbeddingsUnavailable, HowToRecall, Vector
+from yadori.domain.memory import Dweller, EmbeddingsUnavailable, HowToRecall, Provenance, Vector
 from yadori.usecase.conversation import Conversation
 
 SORA = Dweller(id="sora", owner="架空の持ち主", name="そら", nickname="そら")
@@ -36,8 +36,12 @@ class _Reversed:
         self._inner: CharacterPairs = inner
 
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="reversed-characters", tool_version="v1")
+
+    @property
     def name(self) -> str:
-        return "reversed-characters-v1"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         return self._inner.of(text[::-1])
@@ -48,8 +52,12 @@ class _Missing:
     """使えない埋め込み。"""
 
     @property
+    def provenance(self) -> Provenance:
+        return Provenance(ai_model=None, tool="missing", tool_version="v0")
+
+    @property
     def name(self) -> str:
-        return "missing"
+        return self.provenance.index_name
 
     def of(self, text: str) -> Vector:
         del text

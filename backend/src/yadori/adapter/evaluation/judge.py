@@ -32,6 +32,9 @@ _FENCE = re.compile(r"^```[a-z]*\s*|\s*```$", re.MULTILINE)
 
 
 class _Call(Protocol):
+    @property
+    def model(self) -> str: ...
+
     def ask(self, preface: str, spoken: str) -> str: ...
 
 
@@ -39,6 +42,12 @@ class _Call(Protocol):
 class ClaudeCodeJudge:
     def __init__(self, call: _Call) -> None:
         self._call: _Call = call
+
+    @property
+    def name(self) -> str:
+        # 呼び方の部品が実際に使う名前をそのまま返す。別に受けると下書きに残る名前と
+        # 実際に判定した AIモデルがずれ得る。
+        return self._call.model
 
     def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
         """問いをいくつか渡し、問いごとに同じ話題と判定された候補の番号を組で受け取る。"""
