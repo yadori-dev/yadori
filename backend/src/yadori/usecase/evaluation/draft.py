@@ -148,7 +148,10 @@ class Drafting:
         - 候補のある発話だけを判定に渡し、組を集める
         - 組を解いて評価セットに組む
         - 指す先が揃っていることを確かめてから書く
+
+        書ける先かは最初に確かめる。判定を全部走らせた後に断るのは遅い。
         """
+        self._drafts.verify_writable(out)
         recorded, skipped = self._recorded(places)
         incoming = self._incoming([one for _, one in recorded], _EMPTY)
         resolved, _, _ = self._drawn(_EMPTY, recorded, incoming)
