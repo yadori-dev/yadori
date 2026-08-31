@@ -2,10 +2,14 @@
 
 from yadori.domain.evaluation.failures import BrokenRecord, CannotDraft, CannotMeasure
 from yadori.domain.evaluation.model import (
+    Added,
+    Appended,
     Asking,
     Case,
+    Covered,
     Difference,
     Draft,
+    DrawnWith,
     Exchange,
     Measurement,
     Outcome,
@@ -16,17 +20,21 @@ from yadori.domain.evaluation.model import (
     Recorded,
     Shifted,
 )
-from yadori.domain.evaluation.ports import DraftWriter, Judge, Records
+from yadori.domain.evaluation.ports import Drafts, Judge, Records
 
 __all__ = [
+    "Added",
+    "Appended",
     "Asking",
     "BrokenRecord",
     "CannotDraft",
     "CannotMeasure",
     "Case",
+    "Covered",
     "Difference",
     "Draft",
-    "DraftWriter",
+    "Drafts",
+    "DrawnWith",
     "Exchange",
     "Judge",
     "Measurement",

@@ -1,7 +1,8 @@
 """評価セットをファイルから読む。
 
 リポジトリに置くものは架空の会話で書く。実際の会話から作ったものは手元に置く。
-読むだけで判断しない。確認前の問を断るのは測る側である。
+読むだけで判断しない。確認前の問を断るのも、問が一つも無いことを断るのも測る側である。
+下書きは人が問をすべて消すことがあるので、問が無くても読める。
 """
 
 from __future__ import annotations
@@ -75,9 +76,9 @@ class EvalFile:
         return value
 
     def _rows(self, written: dict[str, object], key: str) -> list[dict[str, object]]:
-        rows = written.get(key)
-        if not isinstance(rows, list) or not rows:
-            raise CannotMeasure(f"{key} がありません")
+        rows = written.get(key, [])
+        if not isinstance(rows, list):
+            raise CannotMeasure(f"{key} の書き方が違います")
         found: list[dict[str, object]] = []
         for row in rows:  # pyright: ignore[reportUnknownVariableType]
             if not isinstance(row, dict):

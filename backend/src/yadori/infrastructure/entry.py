@@ -27,9 +27,12 @@ USAGE = (
     + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
     + "  セットは手元に置き、--eval で指す。リポジトリへ入れない。\n"
     + "\n"
-    + "  python -m yadori evals draft --from PATH [--from PATH] --out FILE\n"
+    + "  python -m yadori evals draft --from PATH [--from PATH] --out FILE [--append]\n"
     + "                                      対話する道具の記録から、評価セットの\n"
-    + "                                      下書きを作る。問は人が確かめるまで測れない\n"
+    + "                                      下書きを作る。問は人が確かめるまで測れない。\n"
+    + "                                      --append は既にある下書きへ、前回の範囲より\n"
+    + "                                      後に増えた記録の分だけを足す。前回の問と確認は\n"
+    + "                                      変えない。前回の範囲を持つ下書きにだけ足せる\n"
     + "\n"
     + "  --from は Claude Code の記録のディレクトリ（~/.claude/projects）や Codex の\n"
     + "  記録のディレクトリ（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す\n"
@@ -66,7 +69,12 @@ class Entry:
 
     def _draft(self) -> int:
         """記録のディレクトリと出力先を読み取り、下書きを作る。読めない書き方なら使い方を書く。"""
-        rest = self._argv[2:]
+        # 値を取らない引数（--append）だけを先に拾い、残りを名前と値の対として読む。
+        rest = [given for given in self._argv[2:] if given != "--append"]
+        append = len(self._argv[2:]) - len(rest)
+        if append > 1:
+            print(USAGE, file=sys.stderr)
+            return 1
         places: list[Path] = []
         out: Path | None = None
         for name, value in zip(rest[::2], rest[1::2], strict=False):
@@ -80,7 +88,7 @@ class Entry:
         if len(rest) % 2 != 0 or not places or out is None:
             print(USAGE, file=sys.stderr)
             return 1
-        return Drafter(places, out).run()
+        return Drafter(places, out, append=append == 1).run()
 
     def _measure(self) -> int:
         rest = self._argv[1:]

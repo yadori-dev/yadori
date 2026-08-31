@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import final
 
 from yadori.domain.evaluation.failures import CannotMeasure
+from yadori.domain.memory import HowToRecall, Provenance
 
 
 @final
@@ -276,16 +278,110 @@ class Overlap:
 
 @final
 @dataclass(frozen=True)
+class DrawnWith:
+    """候補の引き方。何で候補を引き、何で判定したか。下書きの前回の範囲に残る。
+
+    追記を断るのは、埋め込みの AIモデルか道具の名前、思い出し方、判定の AIモデルが
+    違うとき。道具の版だけの違いは断らず注意にする。版で断ると依存を上げるたびに
+    確認済みの問が無駄になる。
+    """
+
+    provenance: Provenance
+    how: HowToRecall
+    judge: str
+
+    def differs_from(self, other: DrawnWith) -> str | None:
+        """今の引き方と違うところ。同じなら無し。"""
+        found: list[str] = []
+        if self.provenance.ai_model != other.provenance.ai_model:
+            found.append(
+                f"埋め込みの AIモデル（前回 {self.provenance.ai_model or 'AIモデル無し'}、"
+                + f"今回 {other.provenance.ai_model or 'AIモデル無し'}）"
+            )
+        if self.provenance.tool != other.provenance.tool:
+            found.append(
+                f"埋め込みを動かす道具（前回 {self.provenance.tool}、今回 {other.provenance.tool}）"
+            )
+        if self.how != other.how:
+            found.append(
+                f"思い出し方（前回 {self._how_of(self.how)}、今回 {self._how_of(other.how)}）"
+            )
+        if self.judge != other.judge:
+            found.append(f"判定の AIモデル（前回 {self.judge}、今回 {other.judge}）")
+        return "、".join(found) if found else None
+
+    def tool_version_changed(self, other: DrawnWith) -> str | None:
+        """道具の版だけが違うときの注意。同じなら無し。"""
+        if self.provenance.tool_version == other.provenance.tool_version:
+            return None
+        return (
+            f"埋め込みを動かす道具の版が前回（{self.provenance.tool}-{self.provenance.tool_version}）"
+            + f"と違います（今回 {other.provenance.tool}-{other.provenance.tool_version}）。"
+            + "候補の引き方がわずかに変わり得ます"
+        )
+
+    @property
+    def described(self) -> str:
+        """画面と下書きに出す一行。"""
+        return (
+            f"埋め込み: {self.provenance.described} / 条件: {self._how_of(self.how)}"
+            + f" / 判定: {self.judge}"
+        )
+
+    def _how_of(self, how: HowToRecall) -> str:
+        return f"直近{how.recent_turns}往復・候補{how.found_limit}件・下限{how.relevance_floor}"
+
+
+@final
+@dataclass(frozen=True)
+class Covered:
+    """前回の範囲。下書きが持つ印で、追記はここから読む。
+
+    どの時刻までの記録を、どのディレクトリから読み、どのファイルを読めずに飛ばし、
+    何セッション読んだか、名前の番号をどこまで使ったか、何で候補を引いたか。
+    """
+
+    until: datetime
+    places: tuple[str, ...]
+    skipped: tuple[str, ...]
+    sessions: int
+    last_exchange: int
+    last_case: int
+    drawn_with: DrawnWith
+
+    def places_differ_from(self, places: Sequence[str]) -> str | None:
+        """記録のディレクトリの集まりが違うか。順序は問わない。"""
+        if set(self.places) == set(places):
+            return None
+        return f"記録のディレクトリ（前回 {sorted(self.places)}、今回 {sorted(places)}）"
+
+
+@final
+@dataclass(frozen=True)
+class Added:
+    """足す分。追記で下書きの末尾に足すやりとりと問の並び。評価セットではない。
+
+    新しい問の期待は前回のやりとりを指すので、足す分だけでは指す先が揃わない。
+    合わせた評価セットの確かめは手順が書く前に済ませる。
+    """
+
+    exchanges: tuple[Exchange, ...]
+    cases: tuple[Case, ...]
+
+
+@final
+@dataclass(frozen=True)
 class Draft:
-    """下書き。記録から作った評価セットと、何を取り出したかの数。
+    """下書き。記録から作った評価セットと、何を取り出したか。
 
     下書きの問はすべて確認前なので、確認が要る数は問の数と同じで別に持たない。
+    飛ばしたファイルはどれかをパスで持ち、画面は数を出す。
     """
 
     recall_eval: RecallEval
     sessions: int
     spoken: int
-    skipped_files: int
+    skipped: tuple[str, ...]
 
     @property
     def exchanges(self) -> int:
@@ -294,3 +390,25 @@ class Draft:
     @property
     def cases(self) -> int:
         return len(self.recall_eval.cases)
+
+
+@final
+@dataclass(frozen=True)
+class Appended:
+    """追記の結果。前回の範囲（追記する前のもの）と、前回・今回・足した分の数。
+
+    渡した数と渡さなかった数の和は新しい発話の数に一致する。埋め込みを動かす道具の
+    版が変わったときの注意も運ぶ。
+    """
+
+    covered: Covered
+    previous_exchanges: int
+    previous_cases: int
+    new_sessions: int
+    incoming: int
+    skipped: tuple[str, ...]
+    asked: int
+    unasked: int
+    added_exchanges: int
+    added_cases: int
+    notice: str | None

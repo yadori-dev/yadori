@@ -64,11 +64,13 @@ class Measuring:
         self._eval.verify_pointing()
 
     def _check_confirmed(self) -> None:
-        """人が確かめていない問が無いことを確かめる。
+        """測れる問が揃っていることを確かめる。問が無い、または人が確かめていない問がある。
 
         下書きから作った問は確認前の印を持つ。確かめていない期待を測ると、
         判定した側の癖がそのまま思い出す質の値になる。
         """
+        if not self._eval.cases:
+            raise CannotMeasure("問が一つもありません")
         if self._eval.unconfirmed:
             raise CannotMeasure(
                 f"確認していない問が {self._eval.unconfirmed} 問あります。"
