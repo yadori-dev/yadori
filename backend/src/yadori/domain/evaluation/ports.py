@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
-from yadori.domain.evaluation.model import Pair, RecallEval, Recorded
+from yadori.domain.evaluation.model import Asking, Pair, RecallEval, Recorded
 
 
 class Records(Protocol):
@@ -23,17 +23,21 @@ class Records(Protocol):
 
 
 class Judge(Protocol):
-    """判定。一つの作業場所の発話の並びを受け取り、後の発話が前のどの発話の
-    話題を指すかを組で返す。
+    """判定。後の発話と候補の問いをいくつか受け取り、候補のうちどれが同じ話題かを
+    組で返す。
 
-    受け取るのは発話の文章だけである。返事、時刻、作業場所は渡らない
-    （ADR-017）。続けられなければ `CannotDraft` を投げる。
+    受け取るのは発話と候補の文章だけである。返事、時刻、作業場所は渡らない
+    （ADR-017）。作業場所の発話を丸ごと受け取ることはない。続けられなければ
+    `CannotDraft` を投げる。
     """
 
-    def pairs(self, utterances: Sequence[str]) -> tuple[Pair, ...]: ...
+    def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]: ...
 
 
 class DraftWriter(Protocol):
-    """下書きの書き手。出力先の境界を守り、書けなければ `CannotDraft` を投げる。"""
+    """下書きの書き手。出力先の境界を守り、書けなければ `CannotDraft` を投げる。
 
-    def write(self, path: Path, recall_eval: RecallEval) -> None: ...
+    何で候補を引いたか（埋め込みの名前と条件）を冒頭に残す。後から比べるために要る。
+    """
+
+    def write(self, path: Path, recall_eval: RecallEval, drawn_with: str) -> None: ...

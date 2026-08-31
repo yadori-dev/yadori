@@ -2,6 +2,7 @@
 
 from yadori.domain.evaluation.failures import BrokenRecord, CannotDraft, CannotMeasure
 from yadori.domain.evaluation.model import (
+    Asking,
     Case,
     Difference,
     Draft,
@@ -18,6 +19,7 @@ from yadori.domain.evaluation.model import (
 from yadori.domain.evaluation.ports import DraftWriter, Judge, Records
 
 __all__ = [
+    "Asking",
     "BrokenRecord",
     "CannotDraft",
     "CannotMeasure",

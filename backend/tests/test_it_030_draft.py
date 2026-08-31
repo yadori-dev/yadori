@@ -8,12 +8,13 @@ import tomllib
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import final
+from typing import ClassVar, final
 
 import pytest
 
 from tests.records import (
     OTHER_WORKSPACE,
+    TEST_HOW,
     WORKSPACE,
     FailingJudge,
     FixedJudge,
@@ -35,6 +36,7 @@ from yadori.adapter.evaluation import (
 from yadori.adapter.store import InMemoryMemories
 from yadori.adapter.tool import ToolCallFailed, ToolLimitReached, TooLongForTool
 from yadori.domain.evaluation import (
+    Asking,
     CannotDraft,
     CannotMeasure,
     Case,
@@ -42,17 +44,19 @@ from yadori.domain.evaluation import (
     RecallEval,
     Recorded,
 )
-from yadori.domain.memory import HowToRecall
+from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Vector
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.entry import USAGE, Entry
 from yadori.usecase.evaluation import Drafting, Measuring
 
 A = "ベランダにトマトの苗を植えました"
 B = "水やりは朝と夕方どちらがいいですか"
-C = "植物の世話について教えてください"
 D = "住民税の納付書が届きました"
 E = "図書館で小説を三冊借りました"
 NOD = "いいよ"
+A2 = "トマトの苗はその後どうなりましたか"  # A を指す（文字を共有）
+B2 = "水やりは朝がいいと聞きましたが本当ですか"  # B を指す
+B3 = "朝の水やりの話の続きですが肥料も要りますか"  # B2 を指す（連鎖）
 HOW = HowToRecall(recent_turns=1, found_limit=5, relevance_floor=0.21)
 
 TURNS = [
@@ -62,13 +66,24 @@ TURNS = [
     (D, "期限をお忘れなく"),
     (E, "楽しみですね"),
 ]
-# 別のセッションで前の話題を指す発話。同じセッションで直前を指す組は件にならない。
-LATER = [(C, "トマトの件ですね")]
+# 別のセッションで前の話題を指す発話。直近の外に置く。
+LATER = [(A2, "トマトの件ですね"), (B2, "本当です")]
 FILLERS = [(f"別の話題その{n}について相談です", "はい") for n in range(7)]
 
 
 def _same(one: Recorded) -> tuple[str, str, datetime, str]:
     return (one.utterance, one.reply, one.at, one.workspace)
+
+
+def _drafting(judge: FixedJudge | FailingJudge, embeddings: object = None) -> Drafting:
+    return Drafting(
+        [ClaudeCodeRecords(), CodexRecords()],
+        judge,
+        DraftFile(),
+        embeddings or CharacterPairs(),  # pyright: ignore[reportArgumentType]
+        InMemoryMemories,
+        TEST_HOW,
+    )
 
 
 class TestIT030001:
@@ -83,20 +98,19 @@ class TestIT030001:
             + claude_code_noise("s1", WORKSPACE, minute=50),
         )
         _ = write(place, "codex.jsonl", codex_lines("s2", WORKSPACE, TURNS))
-        _ = write(place, "later.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
         _ = write(
             place, "broken.jsonl", claude_code_lines("s3", WORKSPACE, TURNS[:1]) + "{broken\n"
         )
         _ = write(place, "unknown.jsonl", '{"hello": "world"}\n')
+        _ = write(place, "later.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
         out = tmp_path / "draft.toml"
 
         from_claude = ClaudeCodeRecords().read(place / "claude.jsonl")
         from_codex = CodexRecords().read(place / "codex.jsonl")
-        draft = Drafting(
-            [ClaudeCodeRecords(), CodexRecords()], FixedJudge({C: [A]}), DraftFile(), HOW
-        ).run([place], out)
+        draft = _drafting(FixedJudge({A2: [A]})).run([place], out)
 
         assert [_same(one) for one in from_claude] == [_same(one) for one in from_codex]
+        assert all(one.session for one in from_claude + from_codex)
         assert not any("<" in one.utterance for one in from_claude)
         # 短い相槌は読み手からは返り、中身が無いと自分で答える。除くのは手順の側。
         nods = [one for one in from_claude if one.utterance == NOD]
@@ -104,10 +118,32 @@ class TestIT030001:
         assert draft.skipped_files == 2
 
 
+@final
+class _FirstCharacter:
+    """先頭の文字だけを見る別の埋め込み。同じ文でも候補が変わる。"""
+
+    @property
+    def name(self) -> str:
+        return "first-character-v1"
+
+    def of(self, text: str) -> Vector:
+        code = ord(text[0]) if text else 0
+        return tuple(1.0 if place == code % 64 else 0.0 for place in range(64))
+
+
+@final
+class _Unavailable:
+    @property
+    def name(self) -> str:
+        return "unavailable"
+
+    def of(self, text: str) -> Vector:
+        del text
+        raise EmbeddingsUnavailable("入れてください")
+
+
 class TestIT030002:
-    def test_IT_030_002_判定は作業場所ごとにその作業場所の発話だけを受け取る(
-        self, tmp_path: Path
-    ) -> None:
+    def _place(self, tmp_path: Path) -> Path:
         place = tmp_path / "records"
         _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
         _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
@@ -121,59 +157,85 @@ class TestIT030002:
                 first_minute=100,
             ),
         )
-        judge = FixedJudge({C: [A]})
+        return place
 
-        _ = Drafting([ClaudeCodeRecords(), CodexRecords()], judge, DraftFile(), HOW).run(
-            [place], tmp_path / "d.toml"
-        )
+    def test_IT_030_002_候補は同じ作業場所の前の発話だけで判定には発話と候補だけが渡る(
+        self, tmp_path: Path
+    ) -> None:
+        judge = FixedJudge({A2: [A]})
 
-        assert len(judge.calls) == 2
-        assert sorted(len(call) for call in judge.calls) == [2, 5]
-        assert not (set(judge.calls[0]) & set(judge.calls[1]))
-        assert {A, B, C, D, E} in (set(judge.calls[0]), set(judge.calls[1]))
+        _ = _drafting(judge).run([self._place(tmp_path)], tmp_path / "d.toml")
 
-    def test_IT_030_002_判定の失敗は握られずに届き下書きは書かれない(self, tmp_path: Path) -> None:
-        place = tmp_path / "records"
-        _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
+        asked = {asking.utterance: asking.candidates for asking in judge.askings}
+        assert set(asked) <= {A2, B2, "議事録の宛先は誰ですか"}
+        garden = {A, B, D, E, A2, B2}
+        for utterance, candidates in asked.items():
+            assert len(candidates) <= TEST_HOW.found_limit
+            if utterance in garden:
+                assert set(candidates) <= garden  # 別の作業場所の発話は候補にならない
+            else:
+                assert not set(candidates) & garden
+        # 直近往復数以内（直前）の発話は候補に入らない。
+        assert "会議の議事録をまとめてください" not in asked.get("議事録の宛先は誰ですか", ())
+
+    def test_IT_030_002_埋め込みを差し替えると候補が変わる(self, tmp_path: Path) -> None:
+        with_characters = FixedJudge({A2: [A]})
+        with_reversed = FixedJudge({A2: [A]})
+
+        _ = _drafting(with_characters).run([self._place(tmp_path)], tmp_path / "d1.toml")
+        with pytest.raises(CannotDraft):
+            _ = _drafting(with_reversed, _FirstCharacter()).run(
+                [self._place(tmp_path)], tmp_path / "d2.toml"
+            )
+
+        assert any(A in asking.candidates for asking in with_characters.askings)
+        assert not any(A in asking.candidates for asking in with_reversed.askings)
+
+    def test_IT_030_002_判定と埋め込みの失敗は握られずに届き下書きは書かれない(
+        self, tmp_path: Path
+    ) -> None:
+        place = self._place(tmp_path)
         out = tmp_path / "d.toml"
 
         with pytest.raises(CannotDraft, match="上限"):
-            _ = Drafting([ClaudeCodeRecords()], FailingJudge("上限に当たった"), DraftFile()).run(
-                [place], out
-            )
+            _ = _drafting(FailingJudge("上限に当たった")).run([place], out)
+        with pytest.raises(EmbeddingsUnavailable):
+            _ = _drafting(FixedJudge({A2: [A]}), _Unavailable()).run([place], out)
 
         assert not out.exists()
 
 
 class TestIT030003:
     def test_IT_030_003_判定の結果をそのまま使わず測れる形へ解いてから書く(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path
     ) -> None:
-        monkeypatch.setitem(sys.modules, "fastembed", None)
         place = tmp_path / "records"
         _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
-        _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
         _ = write(place, "dup.jsonl", codex_lines("s2", WORKSPACE, [(A, "重複")], first_minute=100))
-        _ = write(place, "late.jsonl", codex_lines("s3", WORKSPACE, FILLERS, first_minute=200))
+        _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=110))
+        _ = write(
+            place,
+            "late.jsonl",
+            codex_lines("s3", WORKSPACE, [*FILLERS[:3], (B3, "少し")], first_minute=200),
+        )
+        _ = write(place, "tail.jsonl", codex_lines("s4", WORKSPACE, FILLERS[3:], first_minute=300))
         out = tmp_path / "d.toml"
-        # C は A と B を指す（複数）。B は A を指す（連鎖）が同じセッションの直前なので組にならず、
-        # B は覚えさせる側に残る。最後の話題は直近に入る期待を指す。
-        judge = FixedJudge({C: [A, B], B: [A], FILLERS[6][0]: [FILLERS[0][0]]})
+        # A2 は A と B を指す（複数）。B2 は B を指し、B3 は B2 を指す（連鎖）。
+        judge = FixedJudge({A2: [A, B], B2: [B], B3: [B2]})
 
-        # 既定の直近往復数（六）で解く。FILLERS[0] は残る並びの末尾六つに入る。
-        _ = Drafting([ClaudeCodeRecords(), CodexRecords()], judge, DraftFile()).run([place], out)
+        _ = _drafting(judge).run([place], out)
 
         loaded = EvalFile(out).read()
         utterances = [one.utterance for one in loaded.exchanges]
         assert utterances.count(A) == 1
         cases = {case.utterance: case for case in loaded.cases}
-        assert set(cases) == {C}
-        assert len(cases[C].expected) == 2
-        assert B in utterances
+        assert A2 in cases and B3 in cases
+        assert B2 not in cases and B2 in utterances  # 連鎖の真ん中は期待に残る
         assert len({one.name for one in loaded.exchanges}) == len(loaded.exchanges)
         # 語の重なりの度合いは人が読む欄で、測る側の読み手は読まない。ファイルの中で確かめる。
-        written_cases = rows_of(tomllib.loads(out.read_text(encoding="utf-8")), "case")
-        assert set(names_of(written_cases[0], "overlap")) == set(cases[C].expected)
+        written = rows_of(tomllib.loads(out.read_text(encoding="utf-8")), "case")
+        by_name = {str(row["name"]): row for row in written}
+        assert set(names_of(by_name[cases[A2].name], "overlap")) == set(cases[A2].expected)
         confirmed = RecallEval(
             within=loaded.within,
             exchanges=loaded.exchanges,
@@ -183,7 +245,7 @@ class TestIT030003:
             ),
         )
         measured = Measuring(confirmed, InMemoryMemories, CharacterPairs()).at(HOW)
-        assert measured.total == 1
+        assert measured.total == len(loaded.cases)
 
 
 class TestIT030004:
@@ -200,13 +262,13 @@ class TestIT030004:
         )
 
     def test_IT_030_004_断る判断が測る側の独立した一段にある(self, tmp_path: Path) -> None:
-        unconfirmed = self._eval([Case("c", C, ("a",), (), confirmed=False)])
-        confirmed = self._eval([Case("c", C, ("a",), (), confirmed=True)])
-        plain = self._eval([Case("c", C, ("a",), ())])
-        unknown = self._eval([Case("c", C, ("zzz",), ())])
-        same_case = self._eval([Case("c", C, ("a",), ()), Case("c", E, ("d",), ())])
+        unconfirmed = self._eval([Case("c", A2, ("a",), (), confirmed=False)])
+        confirmed = self._eval([Case("c", A2, ("a",), (), confirmed=True)])
+        plain = self._eval([Case("c", A2, ("a",), ())])
+        unknown = self._eval([Case("c", A2, ("zzz",), ())])
+        same_case = self._eval([Case("c", A2, ("a",), ()), Case("c", E, ("d",), ())])
         same_exchange = self._eval(
-            [Case("c", C, ("a",), ())], (Exchange("a", A, "はい"), Exchange("a", D, "はい"))
+            [Case("c", A2, ("a",), ())], (Exchange("a", A, "はい"), Exchange("a", D, "はい"))
         )
 
         with pytest.raises(CannotMeasure, match="確認していない件が 1 件"):
@@ -246,7 +308,7 @@ class TestIT030005:
         return RecallEval(
             3,
             (Exchange("a", A, "いいですね"),),
-            (Case("c", C, ("a",), (), False, (("a", 0.1),)),),
+            (Case("c", A2, ("a",), (), False, (("a", 0.1),)),),
         )
 
     def test_IT_030_005_書き手が境界を守り途中の失敗では何も書かれない(
@@ -262,37 +324,55 @@ class TestIT030005:
 
         for bad in (repo / "d.toml", existing, directory):
             with pytest.raises(CannotDraft):
-                DraftFile().write(bad, self._eval())
+                DraftFile().write(bad, self._eval(), "埋め込み: x / 条件: y")
         assert existing.read_text(encoding="utf-8") == "x"
-        DraftFile().write(fresh, self._eval())
+        DraftFile().write(fresh, self._eval(), "埋め込み: x / 条件: y")
         loaded = EvalFile(fresh).read()
         assert loaded.exchanges[0] == Exchange("a", A, "いいですね")
-        assert loaded.cases[0].utterance == C
+        assert loaded.cases[0].utterance == A2
+        assert "# 候補を引いた 埋め込み: x / 条件: y" in fresh.read_text(encoding="utf-8")
 
         place = tmp_path / "records"
         _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
+        _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
         out = tmp_path / "never.toml"
         with pytest.raises(CannotDraft):
-            _ = Drafting([ClaudeCodeRecords()], FailingJudge("途中で失敗"), DraftFile()).run(
-                [place], out
-            )
+            _ = _drafting(FailingJudge("途中で失敗")).run([place], out)
         assert not out.exists()
 
 
 class TestIT030006:
     def test_IT_030_006_数は手順が返し伝え方と終了状態は入口が持つ(self, tmp_path: Path) -> None:
         place = tmp_path / "records"
-        _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS + FILLERS))
-        _ = write(place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER, first_minute=90))
+        _ = write(place, "a.jsonl", claude_code_lines("s1", WORKSPACE, TURNS))
+        _ = write(
+            place, "c.jsonl", claude_code_lines("s9", WORKSPACE, LATER + FILLERS, first_minute=90)
+        )
         out = tmp_path / "d.toml"
         written, errors = io.StringIO(), io.StringIO()
         real, sys.stderr = sys.stderr, errors
         try:
-            code = Drafter([place], out, judge=FixedJudge({C: [A]}), writing=written).run()
+            code = Drafter(
+                [place],
+                out,
+                judge=FixedJudge({A2: [A]}),
+                embeddings=CharacterPairs(),
+                how=TEST_HOW,
+                writing=written,
+            ).run()
             missing = Drafter(
                 [tmp_path / "nowhere"],
                 tmp_path / "x.toml",
                 judge=FixedJudge({}),
+                embeddings=CharacterPairs(),
+                writing=io.StringIO(),
+            ).run()
+            zero = Drafter(
+                [place],
+                tmp_path / "zero.toml",
+                judge=FixedJudge({}),
+                embeddings=CharacterPairs(),
+                how=TEST_HOW,
                 writing=io.StringIO(),
             ).run()
             no_out = Entry(["yadori", "evals", "draft", "--from", str(place)]).run()
@@ -312,13 +392,17 @@ class TestIT030006:
         finally:
             sys.stderr = real
         lines = written.getvalue().splitlines()
-        assert code == 0 and len(lines) == 4
-        assert "記録: 2 セッション、中身のある発話 12 件（読めず飛ばしたファイル 0）" in lines[0]
-        assert "覚えさせる発話: 11 件" in lines[1] and "件: 1 件" in lines[2]
+        assert code == 0 and len(lines) == 6
+        assert lines[0].startswith("候補を引いた 埋め込み: character-pairs-v1 / 条件: ")
+        assert "記録: 2 セッション、中身のある発話 13 件（読めず飛ばしたファイル 0）" in lines[1]
+        assert "覚えさせる発話: 12 件" in lines[2] and "件: 1 件" in lines[3]
+        assert "手で足せます" in lines[5]
         assert missing == 1 and "下書きを作れません" in errors.getvalue()
+        assert zero == 1 and "件が一つも出ませんでした" in errors.getvalue()
+        assert not (tmp_path / "zero.toml").exists()
         assert no_out == 1 and unknown == 1
         assert USAGE in errors.getvalue()
-        assert "Codex の記録は判定のために別の相手へ渡る" in USAGE
+        assert "別の相手へ渡ることになる" in USAGE
 
 
 @final
@@ -335,21 +419,25 @@ class _RecordingCall:
 
 
 class TestIT030007:
-    def test_IT_030_007_判定の実装は発話だけを送り返事の不備を下書きの失敗にする(self) -> None:
-        utterances = [A, B, C]
-        good = _RecordingCall('[{"later": 3, "earlier": [1, 2]}]')
+    ASKINGS: ClassVar[list[Asking]] = [Asking(A2, (A, D)), Asking(B2, (B,))]
 
-        pairs = ClaudeCodeJudge(good).pairs(utterances)
+    def test_IT_030_007_判定の実装は発話と候補だけを送り返事の不備を下書きの失敗にする(
+        self,
+    ) -> None:
+        good = _RecordingCall('[{"q": 1, "same": [1]}, {"q": 2, "same": []}]')
 
-        assert {(pair.later, pair.earlier) for pair in pairs} == {(2, 0), (2, 1)}
+        pairs = ClaudeCodeJudge(good).pairs(self.ASKINGS)
+
+        assert {(pair.later, pair.earlier) for pair in pairs} == {(0, 0)}
         preface, spoken = good.sent[0]
-        for text in (A, B, C):
+        for text in (A2, A, D, B2, B):
             assert text in spoken
+        assert E not in spoken  # 候補に無い発話は送られない
         for absent in ("いいですね", "2026", WORKSPACE, "workspace", "cwd"):
             assert absent not in spoken and absent not in preface
         bad_answers: list[str | Exception] = [
-            '[{"later": 3, "earlier": [9]}]',
-            '[{"later": 1, "earlier": [3]}]',
+            '[{"q": 1, "same": [3]}]',
+            '[{"q": 9, "same": [1]}]',
             "組は無いと思います",
             ToolCallFailed("対話する道具を呼べなかった"),
             ToolLimitReached("利用の上限に当たった"),
@@ -357,13 +445,7 @@ class TestIT030007:
         ]
         for answer in bad_answers:
             with pytest.raises(CannotDraft):
-                _ = ClaudeCodeJudge(_RecordingCall(answer)).pairs(utterances)
-        # 置き場を絞る助言は、大きすぎたときだけに付く。
-        with pytest.raises(CannotDraft, match="置き場を絞って"):
-            _ = ClaudeCodeJudge(_RecordingCall(TooLongForTool("大きすぎ"))).pairs(utterances)
-        with pytest.raises(CannotDraft) as refused:
-            _ = ClaudeCodeJudge(_RecordingCall(ToolCallFailed("呼べない"))).pairs(utterances)
-        assert "置き場を絞って" not in str(refused.value)
+                _ = ClaudeCodeJudge(_RecordingCall(answer)).pairs(self.ASKINGS)
         # こちら側の不具合は言い換えずに伝わる。
         with pytest.raises(RuntimeError):
-            _ = ClaudeCodeJudge(_RecordingCall(RuntimeError("こわれた"))).pairs(utterances)
+            _ = ClaudeCodeJudge(_RecordingCall(RuntimeError("こわれた"))).pairs(self.ASKINGS)

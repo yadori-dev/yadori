@@ -36,11 +36,11 @@ def _recorded(reader: Records, place: Path) -> int:
         except BrokenRecord:
             continue
         count += len(read)
-        with_workspace += sum(1 for one in read if one.workspace)
+        with_workspace += sum(1 for one in read if one.workspace and one.session)
         replied += sum(1 for one in read if one.reply)
         _refuse_tool_made(path, read)
     assert count >= 1, "一往復を一件も取り出せない。記録の形が変わった可能性がある"
-    assert with_workspace == count, "作業場所を持たない一往復がある"
+    assert with_workspace == count, "作業場所かセッションを持たない一往復がある"
     assert replied / count >= REPLIED_AT_LEAST, f"返事を持つ一往復が {replied}/{count} しか無い"
     return count
 

@@ -236,8 +236,20 @@ class Recorded:
 
 @final
 @dataclass(frozen=True)
+class Asking:
+    """判定への問い。後の発話と、思い出す手順が引いた前の発話の候補。判定に渡るのはこれだけ。"""
+
+    utterance: str
+    candidates: tuple[str, ...]
+
+
+@final
+@dataclass(frozen=True)
 class Pair:
-    """組。判定が返す、後の発話と、それが指す前の発話の一対。並びの中の番号で指す。"""
+    """組。判定が返す、後の発話と、それが指す前の発話の一対。
+
+    問いの並びの番号（later）と、その問いの候補の並びの番号（earlier）で指す。
+    """
 
     later: int
     earlier: int

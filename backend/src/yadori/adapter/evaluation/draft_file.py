@@ -17,14 +17,16 @@ HEADING = (
     "# 実際の会話の記録から作った評価セットの下書き。手元に置き、リポジトリへ入れない。\n"
     "# 各件を読み、期待が妥当なら confirmed = true にし、違えば件を消す。\n"
     "# overlap は件と期待の語の重なりの度合いで、小さいほど言い換えの件である。\n"
+    "# 候補は宿りの思い出す仕組みで引いたものだけ。拾えなかった組（下限を下回る、件数の上限から\n"
+    "# 外れた）は手で足せる。直近の範囲の組は測れないので足さない。\n"
 )
 
 
 @final
 class DraftFile:
-    def write(self, path: Path, recall_eval: RecallEval) -> None:
+    def write(self, path: Path, recall_eval: RecallEval, drawn_with: str) -> None:
         self._refuse_outside(path)
-        _ = path.write_text(self._text(recall_eval), encoding="utf-8")
+        _ = path.write_text(self._text(recall_eval, drawn_with), encoding="utf-8")
 
     def _refuse_outside(self, path: Path) -> None:
         if path.is_dir():
@@ -38,8 +40,8 @@ class DraftFile:
         if not path.parent.is_dir():
             raise CannotDraft(f"出力先の置き場 {path.parent} がありません")
 
-    def _text(self, recall_eval: RecallEval) -> str:
-        lines = [HEADING, f"within = {recall_eval.within}", ""]
+    def _text(self, recall_eval: RecallEval, drawn_with: str) -> str:
+        lines = [HEADING + f"# 候補を引いた {drawn_with}\n", f"within = {recall_eval.within}", ""]
         for exchange in recall_eval.exchanges:
             lines.extend(self._exchange(exchange))
         for case in recall_eval.cases:

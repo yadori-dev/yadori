@@ -12,7 +12,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import final
 
-from yadori.domain.evaluation import CannotDraft, Pair
+from yadori.domain.evaluation import Asking, CannotDraft, Pair
+from yadori.domain.memory import HowToRecall
 
 WORKSPACE = "/home/someone/work/garden"
 OTHER_WORKSPACE = "/home/someone/work/office"
@@ -219,19 +220,22 @@ def write(place: Path, name: str, text: str) -> Path:
 
 @final
 class FixedJudge:
-    """答えを固定した判定。後の発話の文言から、指す前の発話の文言を決める。"""
+    """答えを固定した判定。後の発話の文言から、同じ話題とする前の発話の文言を決める。
+
+    渡された問い（発話と候補）を記録する。候補に無い前の発話は組にできない。
+    """
 
     def __init__(self, pointing: Mapping[str, Sequence[str]]) -> None:
         self._pointing: Mapping[str, Sequence[str]] = pointing
-        self.calls: list[list[str]] = []
+        self.askings: list[Asking] = []
 
-    def pairs(self, utterances: Sequence[str]) -> tuple[Pair, ...]:
-        self.calls.append(list(utterances))
+    def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
+        self.askings.extend(askings)
         found: list[Pair] = []
-        for later, spoken in enumerate(utterances):
-            for earlier_text in self._pointing.get(spoken, ()):
-                if earlier_text in utterances[:later]:
-                    found.append(Pair(later=later, earlier=utterances.index(earlier_text)))
+        for later, asking in enumerate(askings):
+            for earlier, candidate in enumerate(asking.candidates):
+                if candidate in self._pointing.get(asking.utterance, ()):
+                    found.append(Pair(later=later, earlier=earlier))
         return tuple(found)
 
 
@@ -240,9 +244,13 @@ class FailingJudge:
     def __init__(self, reason: str) -> None:
         self._reason: str = reason
 
-    def pairs(self, utterances: Sequence[str]) -> tuple[Pair, ...]:
-        del utterances
+    def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
+        del askings
         raise CannotDraft(self._reason)
+
+
+# テストで候補を引く条件。文字の埋め込みは語が重なる組を 0.2 前後で拾う。
+TEST_HOW = HowToRecall(recent_turns=2, found_limit=10, relevance_floor=0.15)
 
 
 def rows_of(loaded: dict[str, object], key: str) -> list[dict[str, object]]:
