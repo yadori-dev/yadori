@@ -52,7 +52,7 @@ NOT_APPENDABLE = "前回の範囲を持たないので追記できません。�
 @final
 class DraftFile:
     def verify_writable(self, path: Path) -> None:
-        """新しく書ける先か。手順が記録を読む前に呼び、書くときにももう一度通す。"""
+        """新しく書ける先か。書く直前にも通す。先に確かめても、その間に作られたファイルを踏み得る。"""
         self._refuse_outside(path)
         if path.exists():
             raise CannotDraft(f"出力先 {path} は既にあります。人の確認を消さないため上書きしません")
