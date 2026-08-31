@@ -64,7 +64,7 @@ SAFE = {TOMATO_LATER: [TOMATO]}
 
 
 def _place(tmp_path: Path) -> Path:
-    """二つの形式の記録と雑音を置いた置き場。"""
+    """二つの形式の記録と雑音を置いたディレクトリ。"""
     place = tmp_path / "records"
     turns = [
         (TOMATO, "いいですね"),
@@ -175,8 +175,20 @@ class TestST030001:
         assert "庭に花の種を蒔きました" not in spoken and "犬の散歩に行きました" not in spoken
         assert "飛ばしたファイル 2" in written
 
+    def test_ST_030_001_ファイルを指すと何も書かれず記録のディレクトリを指すよう返る(
+        self, tmp_path: Path
+    ) -> None:
+        place = _place(tmp_path)
+        out = tmp_path / "draft.toml"
+
+        code, written, errors = _draft(place / "claude" / "a.jsonl", out, FixedJudge(SAFE))
+
+        assert code == 1 and written == ""
+        assert "はファイルです。記録のディレクトリを指してください" in errors
+        assert not out.exists()
+
     @pytest.mark.parametrize("missing", [True, False])
-    def test_ST_030_001_空と無い置き場では何も書かれず理由が返る(
+    def test_ST_030_001_空と無いディレクトリでは何も書かれず理由が返る(
         self, tmp_path: Path, missing: bool
     ) -> None:
         place = tmp_path / "nothing"
@@ -390,7 +402,7 @@ class TestST030004:
         code, written, errors = _draft(_place(tmp_path), out, FixedJudge(SAFE))
 
         assert code == 1 and written == ""
-        assert "ディレクトリ" in errors
+        assert "はディレクトリです" in errors
 
     def test_ST_030_004_手元には書け原文が一致し画面に何で引いたかと数が出る(
         self, tmp_path: Path

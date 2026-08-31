@@ -46,14 +46,17 @@ class Settings:
 
 @final
 class SettingsFile:
-    """手元の置き場から、誰を起こすかと名乗りを読む。"""
+    """`YADORI_HOME` から、誰を起こすかと名乗りを読む。"""
 
     def __init__(self, home: Path | None = None) -> None:
         self._home: Path = home or Path(os.environ.get("YADORI_HOME", str(DEFAULT_HOME)))
 
     @property
     def models_path(self) -> Path:
-        """手元で動かす模型の置き場。宿りの設定が無くても決まる。"""
+        """手元で動かす AIモデルのファイルの保存先（`YADORI_HOME` の下の `models/`）。
+
+        宿りの設定が無くても決まる。
+        """
         return self._home / "models"
 
     def read(self) -> Settings:
@@ -80,7 +83,7 @@ class SettingsFile:
         return tomllib.loads(path.read_text(encoding="utf-8"))
 
     def _model(self, written: dict[str, object]) -> str:
-        """どの模型で考えるか。宿りが誰であるかとは別の、動かし方の設定である。"""
+        """どのAIモデルで考えるか。宿りが誰であるかとは別の、動かし方の設定である。"""
         chosen = written.get("model", DEFAULT_MODEL)
         return str(chosen)
 

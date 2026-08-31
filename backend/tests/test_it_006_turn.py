@@ -19,7 +19,7 @@ from yadori.usecase.conversation import Conversation, Turn
 
 
 class _Counting:
-    """思い出したことを数え上げるだけの声。模型を呼ばない。
+    """思い出したことを数え上げるだけの声。AIモデルを呼ばない。
 
     応対そのものの質はここでは見ない。見るのは、名乗りと思い出したことが
     渡っていることと、一往復の順序である。
@@ -39,7 +39,7 @@ class _Silent:
 
     def speak(self, recollection: Recollection, utterance: str) -> str:
         del recollection, utterance
-        raise CannotSpeak("模型が応えない")
+        raise CannotSpeak("AIモデルが応えない")
 
 
 @pytest.fixture

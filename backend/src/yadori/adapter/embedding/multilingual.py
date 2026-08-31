@@ -1,15 +1,16 @@
 """意味を見る埋め込み。手元で動かす。
 
-語の重なりではなく意味を見る。模型は手元で動き、提供元への鍵は要らない。
-初回に模型を取得するときだけ外へ繋ぐ。取得した模型は宿りの置き場の下に置く。
+語の重なりではなく意味を見る。AIモデルは手元で動き、提供元への鍵は要らない。
+初回にAIモデルを取得するときだけ外へ繋ぐ。取得したAIモデルのファイルは
+`YADORI_HOME` の下の `models/` に保存する。
 
 既定の埋め込みである。INC-025 で候補を測って選んだ。導入は本体の依存に
 含まれるため、`uv sync` で入る。
 
-模型を替えると、それまでの索引は使えない。索引は作った模型の名前を持つため、
-違う名前の索引は使わない。原文から作り直せば、以前の記憶も新しい模型で探せる。
-同じ模型でも、動かす道具の版が変わると数の並びの作り方が変わることがある。
-そのため名前には道具の版も含め、版が上がれば索引が作り直されるようにする。
+AIモデルを替えると、それまでのインデックスは使えない。インデックスは作った埋め込みの名前を持つため、
+違う名前のインデックスは使わない。原文から作り直せば、以前の記憶も新しいAIモデルで探せる。
+同じAIモデルでも、動かす道具の版が変わると数の並びの作り方が変わることがある。
+そのため名前には道具の版も含め、版が上がればインデックスが作り直されるようにする。
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ HOW_TO_INSTALL = "意味を見る埋め込みを使えません。`uv sync` で�
 
 @final
 class Multilingual:
-    """意味を見る埋め込み。最初に使うときだけ模型を読み込む。"""
+    """意味を見る埋め込み。最初に使うときだけAIモデルを読み込む。"""
 
     def __init__(self, model: str = MODEL, cache_dir: Path | None = None) -> None:
         self._model: str = model
@@ -55,7 +56,7 @@ class Multilingual:
             raise EmbeddingsUnavailable(HOW_TO_INSTALL) from missing
 
     def _embedding(self) -> _Embedder:
-        """模型を読み込む。使えなければ、何をすればよいかを添えて断る。"""
+        """AIモデルを読み込む。使えなければ、何をすればよいかを添えて断る。"""
         if self._loaded is None:
             self._loaded = self._loading()
         return self._loaded
@@ -68,7 +69,7 @@ class Multilingual:
         try:
             with warnings.catch_warnings():
                 # 道具が「以前の版と作り方が違う」と毎回告げるが、その差は名前に
-                # 版を含めて索引を分けることで受けている。話す人には関係がない。
+                # 版を含めてインデックスを分けることで受けている。話す人には関係がない。
                 warnings.filterwarnings("ignore", message=".*mean pooling.*", category=UserWarning)
                 return TextEmbedding(
                     model_name=self._model,
@@ -76,12 +77,12 @@ class Multilingual:
                 )
         except Exception as trouble:
             raise EmbeddingsUnavailable(
-                f"埋め込みの模型 {self._model} を使えません。"
+                f"埋め込みのAIモデル {self._model} を使えません。"
                 + f"初回は取得のため外へ繋がる必要があります。（{trouble}）"
             ) from trouble
 
 
 class _Embedder(Protocol):
-    """読み込んだ模型に求めること。測る道具の型をこの層の外へ出さない。"""
+    """読み込んだAIモデルに求めること。測る道具の型をこの層の外へ出さない。"""
 
     def embed(self, documents: list[str]) -> Iterable[Iterable[float]]: ...

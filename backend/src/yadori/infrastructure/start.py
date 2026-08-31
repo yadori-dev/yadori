@@ -34,7 +34,7 @@ class Startup:
         - 記憶を開く
         - 宿りを住まわせ、名乗りを確かめる
         - 一往復の手順を組む
-        - いまの模型の索引が無い記憶を作り直す
+        - いまの埋め込みのインデックスが無い記憶を作り直す
         - 話す場所へ繋いで待つ
         """
         try:
@@ -70,19 +70,20 @@ class Startup:
             _ = memories.write_identity(settings.dweller.id, settings.name_declared)
 
     def _catch_up(self, turn: Turn, settings: Settings) -> None:
-        """いまの模型の索引を持たない記憶へ、索引を作る。
+        """いまの埋め込みのインデックスを持たない記憶へ、インデックスを作る。
 
-        模型を替えると、それまでの索引は使えない。原文は残っているため、
-        ここで作り直せば以前の記憶も新しい模型で探せる。
+        埋め込みを替えると、それまでのインデックスは使えない。原文は残っているため、
+        ここで作り直せば以前の記憶も新しい埋め込みで探せる。
         """
         rebuilt = turn.rebuild_index(settings.dweller.id)
         if rebuilt:
-            print(f"（{rebuilt}件の記憶へ、いまの模型で索引を作りました）")
+            print(f"（{rebuilt}件の記憶へ、いまの埋め込みでインデックスを作りました）")
 
     def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは意味を見る実装を手元で動かす。模型は宿りの置き場の下に置く。
+        埋め込みは意味を見る実装を手元で動かす。AIモデルのファイルは `YADORI_HOME` の下の
+        `models/` に保存する。
         応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
         embeddings = Multilingual(cache_dir=settings.models_path)

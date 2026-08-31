@@ -1,6 +1,6 @@
 """記憶の規則が外へ求めること。
 
-実装は adapter が持つ。この層は保存の方法も模型の種類も知らない。
+実装は adapter が持つ。この層は保存の方法も埋め込みの実装も知らない。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class EmbeddingsUnavailable(Exception):
 class Memories(Protocol):
     """宿りの記憶の保存先。
 
-    原文と索引は別々に扱う。索引は原文から作り直せる派生物である。
+    原文とインデックスは別々に扱う。インデックスは原文から作り直せる派生物である。
     """
 
     def settle(self, dweller: Dweller) -> None: ...
@@ -82,7 +82,7 @@ class Memories(Protocol):
 class Embeddings(Protocol):
     """文章を、意味の近いものどうしが近くなる数値の並びへ変える。
 
-    どの模型のどの版で作ったかを索引へ残すため、名前を持つ。
+    どの埋め込みのどの版で作ったかをインデックスへ残すため、名前を持つ。
     """
 
     @property

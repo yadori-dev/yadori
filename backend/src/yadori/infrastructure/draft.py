@@ -26,7 +26,7 @@ JUDGE_WAIT_SECONDS = 180
 
 @final
 class Drafter:
-    """記録の置き場を指して、下書きを作る。"""
+    """記録のディレクトリを指して、下書きを作る。"""
 
     def __init__(
         self,
@@ -39,7 +39,7 @@ class Drafter:
     ) -> None:
         self._places: tuple[Path, ...] = tuple(places)
         self._out: Path = out
-        # 宿りの設定（dweller.toml）が無くても下書きは作れるように、既定の模型で呼ぶ。
+        # 宿りの設定（dweller.toml）が無くても下書きは作れるように、既定のAIモデルで呼ぶ。
         self._judge: Judge = judge or ClaudeCodeJudge(
             ClaudeCodeCall(DEFAULT_MODEL, JUDGE_WAIT_SECONDS)
         )

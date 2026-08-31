@@ -1,7 +1,7 @@
 """INC-025 の結合テスト。埋め込みを替えたときの境界を確かめる。
 
-架空の会話で書く。模型を呼ぶと遅いため、模型そのものではなく、模型が
-変わったときの振る舞いを確かめる。
+架空の会話で書く。意味を見る埋め込みは AIモデルを呼んで遅いため、それそのものではなく、
+埋め込みが変わったときの振る舞いを確かめる。
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ HOW = HowToRecall(recent_turns=1, found_limit=5, relevance_floor=0.15)
 
 @final
 class _Reversed:
-    """別の模型。文字の並びを逆にしてから作るため、同じ値にならない。"""
+    """別の埋め込み。文字の並びを逆にしてから作るため、同じ値にならない。"""
 
     def __init__(self, inner: CharacterPairs) -> None:
         self._inner: CharacterPairs = inner
@@ -76,7 +76,7 @@ class TestChangingTheModel:
             _ = first.remember(SORA.id, utterance, "はい")
         return memories
 
-    # IT-025-001 違う模型の索引を混ぜない
+    # IT-025-001 違う埋め込みのインデックスを混ぜない
 
     def test_IT_025_001_替えた直後は探した記憶が空になり落ちない(self) -> None:
         memories = self._filled()
@@ -88,7 +88,7 @@ class TestChangingTheModel:
         assert memories.count_episodes(SORA.id) == len(KEPT)
         memories.close()
 
-    def test_IT_025_001_作り直すと以前の記憶も新しい模型で探せる(self) -> None:
+    def test_IT_025_001_作り直すと以前の記憶も新しい埋め込みで探せる(self) -> None:
         memories = self._filled()
         second = Conversation(memories, _Reversed(CharacterPairs()), _Ticking(), HOW)
 
@@ -97,9 +97,9 @@ class TestChangingTheModel:
         assert rebuilt == len(KEPT)
         assert memories.count_episodes(SORA.id) == len(KEPT)
         assert second.recall(SORA.id, "トマトはその後どうなりましたか").found != ()
-        # 作り直した後は、いまの模型の索引を持たない記憶が無い。
+        # 作り直した後は、いまの埋め込みのインデックスを持たない記憶が無い。
         assert memories.episodes_without_index(SORA.id, "reversed-characters-v1") == ()
-        # 以前の模型の索引は消えていない。
+        # 以前の埋め込みのインデックスは消えていない。
         assert memories.episodes_without_index(SORA.id, "character-pairs-v1") == ()
         memories.close()
 
@@ -116,7 +116,7 @@ class TestChangingTheModel:
             _ = broken.remember(SORA.id, "新しい話", "はい")
 
         assert memories.count_episodes(SORA.id) == kept
-        # 索引も増えていない。使えない道の索引を持つ記憶は一件も無い。
+        # インデックスも増えていない。使えない道のインデックスを持つ記憶は一件も無い。
         assert len(memories.episodes_without_index(SORA.id, "missing")) == kept
         memories.close()
 
@@ -158,7 +158,7 @@ class TestOpeningAnOlderStore:
     """
 
     def _older(self, path: Path) -> None:
-        """以前の版の形で、記憶と索引を持つ保存先を作る。"""
+        """以前の版の形で、記憶とインデックスを持つ保存先を作る。"""
         connection = sqlite3.connect(path)
         _ = connection.executescript(self.OLD_SCHEMA)
         _ = connection.execute(
@@ -181,9 +181,9 @@ class TestOpeningAnOlderStore:
         connection.commit()
         connection.close()
 
-    # IT-025-004 以前の形の保存先を開いても原文は残り、索引は模型ごとに持てる
+    # IT-025-004 以前の形の保存先を開いても原文は残り、インデックスは埋め込みごとに持てる
 
-    def test_IT_025_004_以前の形の保存先を開くと原文は残り索引は模型ごとに持てる(
+    def test_IT_025_004_以前の形の保存先を開くと原文は残りインデックスは埋め込みごとに持てる(
         self, tmp_path: Path
     ) -> None:
         path = tmp_path / "memories.sqlite"
@@ -192,12 +192,12 @@ class TestOpeningAnOlderStore:
         memories = SqliteMemories(path)
 
         assert memories.count_episodes(SORA.id) == len(KEPT)
-        # 以前の索引は捨てられ、いまの模型の索引を持たない記憶は全件になる。
+        # 以前のインデックスは捨てられ、いまの埋め込みのインデックスを持たない記憶は全件になる。
         assert len(memories.episodes_without_index(SORA.id, "character-pairs-v1")) == len(KEPT)
         first = memories.recent(SORA.id, 1)[0]
         memories.write_index(first.id, "character-pairs-v1", (1.0, 0.0))
         memories.write_index(first.id, "reversed-characters-v1", (0.0, 1.0))
-        # 二つの模型の索引が同じ記憶に両方残る。片方が黙って上書きされない。
+        # 二つの埋め込みのインデックスが同じ記憶に両方残る。片方が黙って上書きされない。
         others = {episode.id for episode in memories.recent(SORA.id, 10)} - {first.id}
         for model in ("character-pairs-v1", "reversed-characters-v1"):
             without = {one.id for one in memories.episodes_without_index(SORA.id, model)}

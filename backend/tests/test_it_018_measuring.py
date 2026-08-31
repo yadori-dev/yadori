@@ -42,7 +42,7 @@ SORA = Dweller(id="sora", owner="架空の持ち主", name="そら", nickname="�
 
 @final
 class _WithoutIndex:
-    """索引を書かない保存先。ほかの操作は本物へ渡す。"""
+    """インデックスを書かない保存先。ほかの操作は本物へ渡す。"""
 
     def __init__(self, inner: InMemoryMemories) -> None:
         self._inner: InMemoryMemories = inner
@@ -159,9 +159,9 @@ class TestMeasuring:
         named = {shifted.case for shifted in difference.better + difference.worse}
         assert "引ける" not in named
 
-    def test_IT_018_003_索引が欠けると測らない(self) -> None:
+    def test_IT_018_003_インデックスが欠けると測らない(self) -> None:
         def fresh() -> Memories:
             return _WithoutIndex(InMemoryMemories())  # pyright: ignore[reportReturnType]
 
-        with pytest.raises(CannotMeasure, match="索引を持たない"):
+        with pytest.raises(CannotMeasure, match="インデックスを持たない"):
             _ = Measuring(RECALL_EVAL, fresh, CharacterPairs()).at(TIGHT)

@@ -1,8 +1,8 @@
 """端末から一往復が通ることを、外の入口から確かめる。
 
-模型を呼ばないため、応対そのものの良し悪しは見ない。見るのは、設定から
+AIモデルを呼ばないため、応対そのものの良し悪しは見ない。見るのは、設定から
 組み立て、話しかけ、覚えるまでの道が繋がっていることである。名乗りどおりの
-応対かどうかは `ST-006-001` が模型を使って確かめる。
+応対かどうかは `ST-006-001` がAIモデルを使って確かめる。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class _Echoing:
 class _Silent:
     def speak(self, recollection: Recollection, utterance: str) -> str:
         del recollection, utterance
-        raise CannotSpeak("模型が応えない")
+        raise CannotSpeak("AIモデルが応えない")
 
 
 def _run(home: Path, spoken: str, voice: object) -> tuple[str, SqliteMemories]:

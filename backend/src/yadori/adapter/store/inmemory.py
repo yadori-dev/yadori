@@ -110,7 +110,7 @@ class InMemoryMemories:
             _ = self._kept.index.pop(key, None)
 
     def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]:
-        """いまの模型の索引を持たない記憶。無視する側と同じ規則で決める。"""
+        """いまの埋め込みのインデックスを持たない記憶。無視する側と同じ規則で決める。"""
         return tuple(
             episode
             for episode in sorted(self._owned(dweller_id), key=lambda one: one.id)
