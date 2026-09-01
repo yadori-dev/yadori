@@ -125,7 +125,7 @@ class TestIT055003:
 
     def _recollection(self, mood: float = 0.0) -> Recollection:
         return Recollection(
-            Identity(1, "わたしはそらです。"), (), (), State(Mood(mood), Character(0.0))
+            Identity(1, "わたしはそらです。"), (), (), State(Mood(mood), Character(0.0)), None
         )
 
     @pytest.mark.parametrize(

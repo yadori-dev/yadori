@@ -122,7 +122,7 @@ class TestST056001:
     def test_ST_056_001_声の前置きに性格の値と言葉が入る(self) -> None:
         call = _Answering("はい。")
         recollection = Recollection(
-            Identity(1, "わたしはそらです。"), (), (), State(Mood(0.0), Character(0.05))
+            Identity(1, "わたしはそらです。"), (), (), State(Mood(0.0), Character(0.05)), None
         )
 
         _ = ClaudeCodeVoice(call).speak(recollection, "おはよう")
@@ -161,12 +161,13 @@ class TestST056002:
         lines = out.splitlines()
         assert lines[0].startswith("気持ち: ") and "半減期 6 時間" in lines[0]
         assert lines[1].startswith("性格: ") and "半減期 90 日" in lines[1]
-        assert lines[2] == "動き（新しい順）:"
-        assert [line.split()[2] for line in lines[3:6]] == ["+0.1", "+0.3", "-0.2"]
-        assert "「次も頑張る」" in lines[3] and "「テストが通らない」" in lines[5]
+        assert lines[2] == "夢はまだありません"
+        assert lines[3] == "動き（新しい順）:"
+        assert [line.split()[2] for line in lines[4:7]] == ["+0.1", "+0.3", "-0.2"]
+        assert "「次も頑張る」" in lines[4] and "「テストが通らない」" in lines[6]
         at_lines = out_at.splitlines()
         assert "時点" in at_lines[0] and "時点" in at_lines[1]
-        assert len(at_lines) == 5 and "「次も頑張る」" not in out_at
+        assert len(at_lines) == 6 and "「次も頑張る」" not in out_at
         assert at_lines[0].startswith("気持ち: +0.10")
 
     def test_ST_056_002_動きが無ければ0とその旨(

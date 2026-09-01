@@ -146,6 +146,9 @@ class HowToRecall:
     なった。一度に渡す件数は 3、5、8 で差が出なかった。
 
     評価セットは架空も実際の会話も小さい。問を足したら測り直す。
+
+    近さの下限は、夢が「同じ話題が繰り返し出た」を見るときにも使う。下限を動かすと夢の
+    選び方も変わる。
     """
 
     recent_turns: int = 6
@@ -270,13 +273,47 @@ class Axis:
 
 
 @dataclass(frozen=True)
+class Dream:
+    """夢の記録。いつ、どこからどこまでの何件を読み、何件を選び、何に気づいたか。原文は変えない。
+
+    番号は保存先が付ける。積むときは項目を渡し、番号の付いた記録を受け取る。
+    """
+
+    id: int
+    at: datetime
+    read_from: datetime
+    read_to: datetime
+    count: int
+    kept: int
+    noticing: str | None
+
+
+@dataclass(frozen=True)
+class Gist:
+    """要点。選んだ往復を話題ごとにまとめた一行。原文とは別の層で、元の往復を指す。"""
+
+    text: str
+    made_at: datetime
+    sources: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Dreamed:
+    """最新の夢と、その夢で残した要点。思い出したことに添えて前置きへ渡す。"""
+
+    dream: Dream
+    gists: tuple[Gist, ...]
+
+
+@dataclass(frozen=True)
 class Recollection:
     """思い出したこと。
 
-    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。今の状態（気持ちと性格）も添える。
+    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。今の状態（気持ちと性格）と、最新の夢（無ければ無し）も添える。
     """
 
     identity: Identity
     recent: tuple[Episode, ...]
     found: tuple[Found, ...]
     state: State
+    dream: Dreamed | None

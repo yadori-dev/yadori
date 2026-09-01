@@ -65,12 +65,30 @@ class StateReport:
                 or f"（半減期 {CHARACTER_HALF_LIFE.days} 日、動きは {CHARACTER_WEIGHT:g} 倍で効く）"
             )
         )
+        self._dream(memories, dweller_id, now)
         if not shifts:
             self._say("動きはまだありません")
             return
         self._say("動き（新しい順）:")
         for shift in reversed(shifts):
             self._say(self._line(memories, shift))
+
+    def _dream(self, memories: Memories, dweller_id: str, now: datetime) -> None:
+        """最近の夢。時点を指したときは、その時点より後の夢は無かったものとして扱う。
+
+        時点より前の別の夢を遡ることはしない（最新の夢しか読まない薄い作り）。
+        """
+        dream = memories.latest_dream(dweller_id)
+        if dream is None or dream.at > now:
+            self._say(
+                "夢はまだありません" if self._at is None else "夢は（その時点では）まだありません"
+            )
+            return
+        gists = memories.gists_of_dream(dream.id)
+        self._say(
+            f"最近の夢: {dream.at.astimezone():%Y-%m-%d %H:%M}  {dream.count} 件を読み"
+            + f" {dream.kept} 件を選び 要点 {len(gists)} 件  気づき: {dream.noticing or '無し'}"
+        )
 
     def _line(self, memories: Memories, shift: Shift) -> str:
         episode = None if shift.episode_id is None else memories.episode(shift.episode_id)
