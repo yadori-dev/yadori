@@ -14,14 +14,18 @@ from datetime import datetime
 from typing import final
 
 from yadori.domain.memory import (
+    MOOD_HALF_LIFE,
     Embeddings,
     Episode,
     Found,
     HowToRecall,
     Identity,
     Memories,
+    Mood,
+    Moved,
     NameNotDeclared,
     Recollection,
+    Shift,
     Vector,
 )
 
@@ -53,27 +57,38 @@ class Conversation:
         - 名乗りを確かめる
         - 直近のやりとりを取る
         - それより前から意味で探す
+        - 今の気持ちを求める
         - 思い出したことを記録する
         """
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
         found = self._found_beyond(dweller_id, utterance, recent)
+        mood = self.mood(dweller_id)
         self._record_retrieval(found)
-        return Recollection(identity=identity, recent=recent, found=found)
+        return Recollection(identity=identity, recent=recent, found=found, mood=mood)
 
-    def remember(self, dweller_id: str, utterance: str, reply: str) -> Episode:
-        """一度のやりとりを、原文のまま記憶へ加える。
+    def remember(
+        self, dweller_id: str, utterance: str, reply: str, moved: Moved | None = None
+    ) -> Episode:
+        """一度のやりとりを、原文のまま記憶へ加え、気持ちを動かす。
 
         - 名乗りを確かめる（無ければ原文を書く前に断る）
         - 数の並びを先に作る（埋め込みを使えなければここで断る）
         - 原文を確定する
         - インデックスを書く
+        - 動きを積む（渡されたときだけ。測る手順と下書きの手順は渡さない）
         """
         identity = self._declared_identity(dweller_id)
         made = self._made(utterance)
         episode = self._keep_episode(dweller_id, utterance, reply, identity)
         self._write_index(episode, made)
+        if moved is not None:
+            self._shift(dweller_id, episode, moved)
         return episode
+
+    def mood(self, dweller_id: str) -> Mood:
+        """今の気持ち。積まれた動きと経過時間から求め、保存しない（ADR-007）。"""
+        return Mood.from_shifts(self._memories.shifts(dweller_id), self._now(), MOOD_HALF_LIFE)
 
     def rebuild_index(self, dweller_id: str) -> int:
         """インデックスを原文から作り直す。
@@ -180,6 +195,13 @@ class Conversation:
         原文を書く前に呼ぶ。埋め込みを使えないときは、ここで断って何も書かない。
         """
         return tuple((way.name, way.to_remember(utterance)) for way in self._ways)
+
+    def _shift(self, dweller_id: str, episode: Episode, moved: Moved) -> None:
+        """その往復で動いたぶんを、上書きせずに積む。"""
+        self._memories.record_shift(
+            dweller_id,
+            Shift(at=self._now(), delta=moved.delta, cause=moved.cause, episode_id=episode.id),
+        )
 
     def _write_index(self, episode: Episode, made: tuple[tuple[str, Vector], ...]) -> None:
         """作っておいた数の並びをインデックスとして書く。

@@ -9,7 +9,15 @@ from collections.abc import Collection
 from datetime import datetime
 from typing import Protocol
 
-from yadori.domain.memory.model import Dweller, Episode, Identity, Provenance, Retrieval, Vector
+from yadori.domain.memory.model import (
+    Dweller,
+    Episode,
+    Identity,
+    Provenance,
+    Retrieval,
+    Shift,
+    Vector,
+)
 
 
 class NameNotDeclared(Exception):
@@ -77,6 +85,12 @@ class Memories(Protocol):
     def record_retrieval(self, episode_ids: Collection[int], at: datetime) -> None: ...
 
     def retrieval(self, episode_id: int) -> Retrieval: ...
+
+    def record_shift(self, dweller_id: str, shift: Shift) -> None: ...
+
+    def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
+        """動きを古い順に。"""
+        ...
 
 
 class Embeddings(Protocol):

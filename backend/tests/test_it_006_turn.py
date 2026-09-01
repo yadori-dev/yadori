@@ -13,8 +13,8 @@ import pytest
 from tests.sora import ABOUT_TOMATO, FILLERS, HOW, NAME_DECLARED, PLANTED, SORA, Ticking, talk
 from yadori.adapter.embedding.characters import CharacterPairs
 from yadori.adapter.store import SqliteMemories
-from yadori.domain.conversation import CannotSpeak
-from yadori.domain.memory import Recollection
+from yadori.domain.conversation import CannotSpeak, Spoken
+from yadori.domain.memory import Moved, Recollection
 from yadori.usecase.conversation import Conversation, Turn
 
 
@@ -25,19 +25,20 @@ class _Counting:
     渡っていることと、一往復の順序である。
     """
 
-    def speak(self, recollection: Recollection, utterance: str) -> str:
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken:
         del utterance
-        return (
+        return Spoken(
             f"名乗り{recollection.identity.version}版"
-            f"／直近{len(recollection.recent)}件"
-            f"／探した{len(recollection.found)}件"
+            + f"／直近{len(recollection.recent)}件"
+            + f"／探した{len(recollection.found)}件",
+            Moved.unmoved(),
         )
 
 
 class _Silent:
     """応対を作れない声。"""
 
-    def speak(self, recollection: Recollection, utterance: str) -> str:
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken:
         del recollection, utterance
         raise CannotSpeak("AIモデルが応えない")
 

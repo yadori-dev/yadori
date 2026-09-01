@@ -15,7 +15,8 @@ from typing import final
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.adapter.voice import ClaudeCodeVoice
+from yadori.adapter.tool import ClaudeCodeCall
+from yadori.adapter.voice import WAIT_SECONDS, ClaudeCodeVoice
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
@@ -92,7 +93,7 @@ class Startup:
         応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
         conversation = Conversation(memories, self.embeddings(settings), self._now)
-        return Turn(conversation, ClaudeCodeVoice(settings.model))
+        return Turn(conversation, ClaudeCodeVoice(ClaudeCodeCall(settings.model, WAIT_SECONDS)))
 
     def embeddings(self, settings: Settings) -> Embeddings:
         """宿りが使う埋め込み。既定の工場が組む。"""

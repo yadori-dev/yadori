@@ -64,6 +64,10 @@ class Terminal:
             self._say(f"（応対できませんでした: {reason}）")
             return
         self._say(f"{self._dweller.nickname}: {response.reply}")
+        self._say(
+            f"（気持ち: {response.moved.delta:+.1f} {response.moved.cause}"
+            + f" → いま {response.mood.value:+.2f}）"
+        )
 
     def _say(self, line: str) -> None:
         _ = self._writing.write(f"{line}\n")

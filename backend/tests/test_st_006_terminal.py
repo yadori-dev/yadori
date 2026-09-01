@@ -14,8 +14,8 @@ from tests.sora import Ticking
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.domain.conversation import CannotSpeak
-from yadori.domain.memory import Recollection
+from yadori.domain.conversation import CannotSpeak, Spoken
+from yadori.domain.memory import Moved, Recollection
 from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation, Turn
@@ -33,12 +33,14 @@ def _home(tmp_path: Path, *, declared: str = NAME_DECLARED) -> Path:
 
 
 class _Echoing:
-    def speak(self, recollection: Recollection, utterance: str) -> str:
-        return f"（覚えている件数 {len(recollection.found)}）{utterance} ですね"
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken:
+        return Spoken(
+            f"（覚えている件数 {len(recollection.found)}）{utterance} ですね", Moved.unmoved()
+        )
 
 
 class _Silent:
-    def speak(self, recollection: Recollection, utterance: str) -> str:
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken:
         del recollection, utterance
         raise CannotSpeak("AIモデルが応えない")
 

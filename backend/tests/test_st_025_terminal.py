@@ -13,7 +13,8 @@ from pathlib import Path
 from tests.sora import Ticking
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.domain.memory import EmbeddingsUnavailable, Provenance, Recollection, Vector
+from yadori.domain.conversation import Spoken
+from yadori.domain.memory import EmbeddingsUnavailable, Moved, Provenance, Recollection, Vector
 from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation, Turn
@@ -42,8 +43,10 @@ class _Missing:
 
 
 class _Echoing:
-    def speak(self, recollection: Recollection, utterance: str) -> str:
-        return f"（覚えている件数 {len(recollection.found)}）{utterance} ですね"
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken:
+        return Spoken(
+            f"（覚えている件数 {len(recollection.found)}）{utterance} ですね", Moved.unmoved()
+        )
 
 
 def _home(tmp_path: Path) -> Path:

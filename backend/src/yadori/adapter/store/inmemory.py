@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
-from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Vector
+from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Shift, Vector
 
 
 @dataclass
@@ -22,6 +22,7 @@ class _Kept:
     episodes: dict[int, tuple[str, Episode]] = field(default_factory=dict)
     index: dict[tuple[int, str], Vector] = field(default_factory=dict)
     retrievals: list[tuple[int, datetime]] = field(default_factory=list)
+    shifts: list[tuple[str, Shift]] = field(default_factory=list)
     next_id: int = 1
 
 
@@ -123,3 +124,9 @@ class InMemoryMemories:
     def retrieval(self, episode_id: int) -> Retrieval:
         times = [at for kept_id, at in self._kept.retrievals if kept_id == episode_id]
         return Retrieval(count=len(times), last_at=max(times) if times else None)
+
+    def record_shift(self, dweller_id: str, shift: Shift) -> None:
+        self._kept.shifts.append((dweller_id, shift))
+
+    def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
+        return tuple(shift for owner, shift in self._kept.shifts if owner == dweller_id)
