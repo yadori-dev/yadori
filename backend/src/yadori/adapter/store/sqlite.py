@@ -137,7 +137,12 @@ class Row:
 class SqliteMemories:
     def __init__(self, path: Path | str) -> None:
         self._closeness: Closeness = Closeness()
-        self._connection: sqlite3.Connection = sqlite3.connect(path, isolation_level=None)
+        # 話す場所によっては、応対を作る間だけ別のスレッドへ移す（Discord は待っている間も
+        # 動き続ける必要がある）。同時に触らないことは場所が保つ（一往復ずつ順に扱う）ため、
+        # スレッドをまたいで使えるようにする。
+        self._connection: sqlite3.Connection = sqlite3.connect(
+            path, isolation_level=None, check_same_thread=False
+        )
         self._connection.row_factory = sqlite3.Row
         _ = self._connection.execute("PRAGMA foreign_keys = ON")
         self._discard_old_index_table()

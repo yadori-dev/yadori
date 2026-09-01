@@ -9,7 +9,7 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import final
+from typing import final, override
 
 from yadori.domain.memory import Dweller
 
@@ -18,6 +18,7 @@ DEFAULT_HOME = Path.home() / ".yadori"
 # 名前は用語集のコード名に合わせる。
 WHO = "dweller.toml"
 NAME_DECLARED = "identity.md"
+DISCORD = "discord.toml"
 
 
 class NotSettled(Exception):
@@ -25,6 +26,20 @@ class NotSettled(Exception):
 
 
 DEFAULT_MODEL = "opus"
+
+
+@final
+@dataclass(frozen=True)
+class DiscordSettings:
+    """Discord と繋ぐための設定。トークンは持ち主の手元から読み、外へ出さない（ADR-019）。"""
+
+    token: str
+    owner_id: int
+
+    @override
+    def __repr__(self) -> str:
+        # 人が読む形にしてもトークンを出さない。記録や画面へ紛れ込ませないため。
+        return f"DiscordSettings(token=<伏せた>, owner_id={self.owner_id})"
 
 
 @final
@@ -71,6 +86,38 @@ class SettingsFile:
             dweller=self._who(written),
             name_declared=self._name_declared(),
             model=self._model(written),
+        )
+
+    def discord(self) -> DiscordSettings:
+        """Discord のトークンと、話しかけてよい持ち主のユーザーIDを読む。
+
+        無い・欠けている・形が違うときは、何をどう書けばよいかを添えて断る。
+        """
+        path = self._home / DISCORD
+        if not path.exists():
+            raise NotSettled(f"{path} がありません。{self._how_to_write_discord()}")
+        try:
+            with path.open("rb") as opened:
+                written: dict[str, object] = tomllib.load(opened)
+        except tomllib.TOMLDecodeError as broken:
+            # 読めない理由には書きかけの中身が入りうる。トークンを持つファイルなので添えない。
+            raise NotSettled(
+                f"{path} の書き方が壊れています。{self._how_to_write_discord()}"
+            ) from broken
+        token, owner_id = written.get("token"), written.get("owner_id")
+        if not isinstance(token, str) or not token:
+            raise NotSettled(f"{path} に token がありません。{self._how_to_write_discord()}")
+        if not isinstance(owner_id, int) or isinstance(owner_id, bool):
+            raise NotSettled(
+                f"{path} の owner_id が数ではありません。{self._how_to_write_discord()}"
+            )
+        return DiscordSettings(token=token, owner_id=owner_id)
+
+    def _how_to_write_discord(self) -> str:
+        return (
+            "次の形で作ってください。\n"
+            + '  token = "<Discord の bot のトークン>"\n'
+            + "  owner_id = <自分のユーザーID>"
         )
 
     def _written(self) -> dict[str, object]:

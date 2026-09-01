@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
-from yadori.adapter.place import Terminal
+from yadori.adapter.place import CannotConnect, Place, Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import ClaudeCodeCall
 from yadori.adapter.voice import WAIT_SECONDS, ClaudeCodeVoice
@@ -22,6 +22,7 @@ from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
 
 Factory = Callable[[Path | None, Announcing | None], Embeddings]
+Where = Callable[[Turn, Settings], Place]
 
 
 @final
@@ -33,7 +34,7 @@ class Startup:
         # 既定の埋め込みは工場が組む。下書きの入口と名前で選ぶ部品も同じ工場を使う。
         self._default: Factory = default or DefaultEmbeddings()
 
-    def run(self) -> int:
+    def run(self, where: Where | None = None) -> int:
         """起こして、待つ。
 
         - 設定を読む
@@ -41,7 +42,7 @@ class Startup:
         - 宿りを住まわせ、名乗りを確かめる
         - 一往復の手順を組む
         - いまの埋め込みのインデックスが無い記憶を作り直す
-        - 話す場所へ繋いで待つ
+        - 渡された場所（既定は端末）へ繋いで待つ。繋げなければ理由を書いて終わる
         """
         try:
             settings = self._settings_file.read()
@@ -53,14 +54,18 @@ class Startup:
             self.settle(memories, settings)
             turn = self._assemble(memories, settings)
             self._catch_up(turn, settings)
-            Terminal(turn, settings.dweller).listen()
-        except EmbeddingsUnavailable as missing:
+            self._where(where)(turn, settings).listen()
+        except (EmbeddingsUnavailable, CannotConnect) as missing:
             return self._refuse(missing)
         finally:
             memories.close()
         return 0
 
-    def _refuse(self, missing: NotSettled | EmbeddingsUnavailable) -> int:
+    def _where(self, where: Where | None) -> Where:
+        """どの場所で待つか。渡されなければ端末で待つ。"""
+        return where or (lambda turn, settings: Terminal(turn, settings.dweller))
+
+    def _refuse(self, missing: NotSettled | EmbeddingsUnavailable | CannotConnect) -> int:
         """起こせない理由を書いて、記憶を増やさずに終わる。何を用意すればよいかは理由が持つ。"""
         print(missing, file=sys.stderr)
         return 1
