@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import final
 
 from yadori.domain.conversation import Spoken, Voice
-from yadori.domain.memory import Episode, Mood, Moved, Recollection
+from yadori.domain.memory import Episode, Moved, Recollection, State
 from yadori.usecase.conversation.service import Conversation
 
 
@@ -27,7 +27,7 @@ class Response:
     recollection: Recollection
     episode: Episode
     moved: Moved
-    mood: Mood
+    state: State
 
 
 @final
@@ -56,7 +56,7 @@ class Turn:
             recollection=recollection,
             episode=episode,
             moved=spoken.moved,
-            mood=self._conversation.mood(dweller_id),
+            state=self._conversation.state(dweller_id),
         )
 
     def rebuild_index(self, dweller_id: str) -> int:

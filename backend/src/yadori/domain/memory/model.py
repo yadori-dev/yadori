@@ -156,6 +156,31 @@ class HowToRecall:
 # 気持ちが薄れる半減期。測っていない仮置きで、実際に使って直す（未決事項「気持ちが薄れる速さ」）。
 # 一晩置けば会話の余韻がほぼ消え、休憩を挟んだ程度なら残る、という見当で置いた。
 MOOD_HALF_LIFE = timedelta(hours=6)
+# 性格が薄れる半減期と、一往復の動きが性格に効く割合。どちらも仮置き（未決事項「性格が変わって
+# よい範囲」）。一日の会話で振り切れず、季節が変わるほど続けば傾向として残る、という見当。
+CHARACTER_HALF_LIFE = timedelta(days=90)
+CHARACTER_WEIGHT = 0.1
+
+
+@dataclass(frozen=True)
+class Fading:
+    """薄れ方。動きのそれぞれを経過時間で半減期の指数で薄め、係数を掛けて足す。
+
+    気持ちと性格は、この係数と半減期が違うだけの同じ計算である（ADR-005）。AIモデルを
+    呼ばず、同じ入力から同じ値になる。−1 と +1 の間に収める。
+    """
+
+    half_life: timedelta
+    weight: float = 1.0
+
+    def sum(self, shifts: Iterable[Shift], now: datetime) -> float:
+        total = 0.0
+        for shift in shifts:
+            elapsed = max((now - shift.at).total_seconds(), 0.0)
+            total += (
+                shift.delta * self.weight * math.pow(0.5, elapsed / self.half_life.total_seconds())
+            )
+        return max(-1.0, min(1.0, total))
 
 
 @dataclass(frozen=True)
@@ -192,20 +217,51 @@ class Mood:
     value: float
 
     @classmethod
-    def from_shifts(cls, shifts: Iterable[Shift], now: datetime, half_life: timedelta) -> Mood:
-        """動きのそれぞれを経過時間で薄めた和。−1 と +1 の間に収める。
-
-        薄れ方は半減期の指数で、AIモデルを呼ばず同じ入力から同じ値になる。
-        """
-        total = 0.0
-        for shift in shifts:
-            elapsed = max((now - shift.at).total_seconds(), 0.0)
-            total += shift.delta * math.pow(0.5, elapsed / half_life.total_seconds())
-        return cls(value=max(-1.0, min(1.0, total)))
+    def from_shifts(cls, shifts: Iterable[Shift], now: datetime) -> Mood:
+        return cls(value=Fading(MOOD_HALF_LIFE).sum(shifts, now))
 
     @property
     def described(self) -> str:
-        """人が読む言葉。値の帯で三つに分ける。"""
+        return Axis(self.value).described
+
+
+@dataclass(frozen=True)
+class Character:
+    """性格の現在値。応対の傾向。気持ちと同じ動きから、長い半減期と小さな係数で求める。"""
+
+    value: float
+
+    @classmethod
+    def from_shifts(cls, shifts: Iterable[Shift], now: datetime) -> Character:
+        return cls(value=Fading(CHARACTER_HALF_LIFE, CHARACTER_WEIGHT).sum(shifts, now))
+
+    @property
+    def described(self) -> str:
+        return Axis(self.value).described
+
+
+@dataclass(frozen=True)
+class State:
+    """今の状態。気持ちと性格。思い出したことに添え、前置きに渡す。"""
+
+    mood: Mood
+    character: Character
+
+    @classmethod
+    def from_shifts(cls, shifts: Iterable[Shift], now: datetime) -> State:
+        kept = tuple(shifts)
+        return cls(mood=Mood.from_shifts(kept, now), character=Character.from_shifts(kept, now))
+
+
+@dataclass(frozen=True)
+class Axis:
+    """一本の軸。−1 沈む ↔ +1 明るい。気持ちと性格が同じ軸を使い、同じ言葉で読む。"""
+
+    value: float
+
+    @property
+    def described(self) -> str:
+        """値を人が読む言葉に。帯で三つに分ける。"""
         if self.value <= -0.3:
             return "沈んでいる"
         if self.value >= 0.3:
@@ -217,10 +273,10 @@ class Mood:
 class Recollection:
     """思い出したこと。
 
-    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。今の気持ちも添える。
+    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。今の状態（気持ちと性格）も添える。
     """
 
     identity: Identity
     recent: tuple[Episode, ...]
     found: tuple[Found, ...]
-    mood: Mood
+    state: State

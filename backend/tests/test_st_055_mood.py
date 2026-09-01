@@ -46,7 +46,7 @@ class _Moving:
         self.moods: list[Mood] = []
 
     def speak(self, recollection: Recollection, utterance: str) -> Spoken:
-        self.moods.append(recollection.mood)
+        self.moods.append(recollection.state.mood)
         moved = self._moves.pop(0) if self._moves else Moved.unmoved()
         return Spoken(f"{utterance} ですね", moved)
 
@@ -108,12 +108,12 @@ class TestST055002:
         values: list[float] = []
         for hours in (0, 6, 12, 0):
             clock.at = started + timedelta(hours=hours)
-            values.append(conversation.mood(SORA.id).value)
+            values.append(conversation.state(SORA.id).mood.value)
 
         assert [round(value, 3) for value in values] == [0.5, 0.25, 0.125, 0.5]
         # 思い出したことに添う気持ちも、その時点の値である。
         clock.at = started + timedelta(hours=6)
-        assert round(conversation.recall(SORA.id, "どう？").mood.value, 3) == 0.25
+        assert round(conversation.recall(SORA.id, "どう？").state.mood.value, 3) == 0.25
 
 
 class TestST055003:

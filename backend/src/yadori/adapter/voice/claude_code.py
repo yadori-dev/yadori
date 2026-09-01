@@ -56,9 +56,11 @@ class ClaudeCodeVoice:
     def _preface(self, recollection: Recollection) -> str:
         """名乗りを先に置き、今の気持ち、思い出したことを続ける。"""
         preface = [recollection.identity.text]
+        mood, character = recollection.state.mood, recollection.state.character
         preface.append(
-            f"\nいまのあなたの気持ちは「{recollection.mood.described}」"
-            + f"（{recollection.mood.value:+.2f}。−1 が沈む、+1 が明るい）です。"
+            f"\nいまのあなたの気持ちは「{mood.described}」"
+            + f"（{mood.value:+.2f}。−1 が沈む、+1 が明るい）で、"
+            + f"長い目で見た性格の傾向は「{character.described}」（{character.value:+.2f}）です。"
         )
         if recollection.found:
             preface.append(

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import final
 
@@ -15,10 +16,13 @@ from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.measure import Measure
 from yadori.infrastructure.settings import SettingsFile
 from yadori.infrastructure.start import Startup
+from yadori.infrastructure.state import StateReport
 
 USAGE = (
     "使い方:\n"
     + "  python -m yadori                    宿りを起こして話す\n"
+    + "  python -m yadori state [--at 時刻]  いまの気持ちと性格と、動きの時系列を読む。\n"
+    + "                                      --at に ISO 形式の時刻を指すと、その時点の値\n"
     + "  python -m yadori measure            今の条件で測る\n"
     + "  python -m yadori measure [--eval PATH] [--embedding NAME(+NAME)]\n"
     + "                          [--floor N] [--recent N] [--limit N]\n"
@@ -71,10 +75,28 @@ class Entry:
             return Startup().run()
         if self._argv[0] == "measure":
             return self._measure()
+        if self._argv[0] == "state":
+            return self._state()
         if self._argv[:2] == ["evals", "draft"]:
             return self._draft()
         print(USAGE, file=sys.stderr)
         return 1
+
+    def _state(self) -> int:
+        """時点を読み取り、状態を書く。読めない書き方なら使い方を書く。"""
+        rest = self._argv[1:]
+        if not rest:
+            return StateReport().run()
+        if len(rest) != 2 or rest[0] != "--at":
+            print(USAGE, file=sys.stderr)
+            return 1
+        try:
+            at = datetime.fromisoformat(rest[1])
+        except ValueError:
+            print(USAGE, file=sys.stderr)
+            return 1
+        # 時差の無い時刻は手元の時刻とみなす。
+        return StateReport(at=at if at.tzinfo else at.astimezone()).run()
 
     def _draft(self) -> int:
         """記録のディレクトリと出力先を読み取り、下書きを作る。読めない書き方なら使い方を書く。"""

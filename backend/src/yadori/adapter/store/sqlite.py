@@ -226,6 +226,13 @@ class SqliteMemories:
             happened_at=happened_at,
         )
 
+    def episode(self, episode_id: int) -> Episode | None:
+        row = self._one(
+            "SELECT id, utterance, reply, identity_version, happened_at FROM episode WHERE id = ?",
+            (episode_id,),
+        )
+        return None if row is None else self._as_episode(row)
+
     def count_episodes(self, dweller_id: str) -> int:
         row = self._one("SELECT COUNT(*) AS total FROM episode WHERE dweller_id = ?", (dweller_id,))
         return 0 if row is None else row.number("total")

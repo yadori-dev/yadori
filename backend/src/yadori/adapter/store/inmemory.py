@@ -130,3 +130,7 @@ class InMemoryMemories:
 
     def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
         return tuple(shift for owner, shift in self._kept.shifts if owner == dweller_id)
+
+    def episode(self, episode_id: int) -> Episode | None:
+        kept = self._kept.episodes.get(episode_id)
+        return None if kept is None else kept[1]
