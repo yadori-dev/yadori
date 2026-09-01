@@ -30,7 +30,8 @@ from tests.records import (
     text_of,
     write,
 )
-from yadori.adapter.embedding import CharacterPairs
+from tests.sora import Steady, fixed
+from yadori.adapter.embedding import CharacterPairs, Weighing
 from yadori.domain.evaluation import Judge
 from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall, Provenance, Vector
 from yadori.infrastructure.draft import Drafter
@@ -114,7 +115,7 @@ def _draft(
     real_stderr, sys.stderr = sys.stderr, errors
     try:
         code = Drafter(
-            [place], out, judge=judge, embeddings=CharacterPairs(), how=how, writing=written
+            [place], out, judge=judge, default=fixed(CharacterPairs()), how=how, writing=written
         ).run()
     finally:
         sys.stderr = real_stderr
@@ -314,7 +315,7 @@ class TestST030003:
             code = Measure(
                 eval_path=path,
                 baseline=HowToRecall(recent_turns=6, found_limit=5, relevance_floor=0.21),
-                embeddings=CharacterPairs(),
+                embeddings=Weighing(CharacterPairs(), clock=Steady()),
                 writing=written,
             ).run()
         finally:
@@ -464,7 +465,11 @@ class _Unavailable:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         del text
         raise EmbeddingsUnavailable(
             "意味を見る埋め込みを使えません。`uv sync` で依存を導入してください。"
@@ -502,7 +507,7 @@ class TestST030008:
                 [_place(tmp_path)],
                 out,
                 judge=FixedJudge(SAFE),
-                embeddings=_Unavailable(),
+                default=fixed(_Unavailable()),
                 writing=written,
             ).run()
         finally:

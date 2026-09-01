@@ -203,7 +203,11 @@ class _Unavailable:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         del text
         raise EmbeddingsUnavailable(
             "意味を見る埋め込みを使えません。`uv sync` で依存を導入してください。"

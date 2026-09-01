@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -12,27 +13,65 @@ Vector = tuple[float, ...]
 
 
 @dataclass(frozen=True)
+class Prefixes:
+    """添え書きの組。埋め込みの AIモデルが文の前に付けるよう定める、側ごとの決まった語。
+
+    覚える側と問い合わせ側で別の語を定めるものがある。語を変えると数の並びの
+    作り方が変わるため、出自に含めてインデックスの名前に効かせる。
+    """
+
+    remember: str
+    recall: str
+
+    @property
+    def code(self) -> str:
+        """名前へ挟む 8 桁の十六進の符号。
+
+        語そのものは名前に入れない。名前は保存先で完全一致で照合される ASCII の
+        識別子だからである。区切りを挟むのは、語の切れ目を移しただけの組が同じ
+        符号にならないため。組み込みの `hash` は起動ごとに変わるので使わない。
+        """
+        return f"{zlib.crc32(f'{self.remember}\n{self.recall}'.encode()):08x}"
+
+
+@dataclass(frozen=True)
 class Provenance:
     """埋め込みの出自。何で作られたか。
 
-    AIモデルの名前（AIを使わなければ無し）と、動かした道具の名前と版。インデックスの
-    名前はここから組む。規則を各実装が持つと片方だけ変わって名前が黙ってずれるため、
-    ここが一箇所で持つ。
+    AIモデルの名前（AIを使わなければ無し）と、動かした道具の名前と版と、添え書きの組
+    （定めるものだけ）。インデックスの名前はここから組む。規則を各実装が持つと片方だけ
+    変わって名前が黙ってずれるため、ここが一箇所で持つ。
     """
 
     ai_model: str | None
     tool: str
     tool_version: str
+    prefixes: Prefixes | None = None
 
     @property
     def index_name(self) -> str:
+        """添え書きが無ければ `AIモデルの名前/道具-版`。有れば名前の直後に `+符号` を挟む。"""
         tooling = f"{self.tool}-{self.tool_version}"
-        return tooling if self.ai_model is None else f"{self.ai_model}/{tooling}"
+        if self.ai_model is None:
+            return tooling
+        marked = self.ai_model if self.prefixes is None else f"{self.ai_model}+{self.prefixes.code}"
+        return f"{marked}/{tooling}"
 
     @property
     def described(self) -> str:
-        """人が読む形。AIモデルの名前と、括弧で道具の名前と版。"""
+        """人が読む形。AIモデルの名前と、括弧で道具の名前と版。添え書きは含めない。
+
+        下書きの「候補を引いた」行にも出る文であり、添え書きを含めるとそちらの画面が
+        変わる。添え書きの語は測る入口が別に組む。
+        """
         return f"{self.ai_model or 'AIモデル無し'}（{self.tool}-{self.tool_version}）"
+
+    @property
+    def prefixes_described(self) -> str:
+        """添え書きの語を人が読む形。無ければ「無し」。"""
+        if self.prefixes is None:
+            return "無し"
+        return f"覚える「{self.prefixes.remember}」 問い合わせ「{self.prefixes.recall}」"
 
 
 @dataclass(frozen=True)
@@ -93,11 +132,13 @@ class Found:
 class HowToRecall:
     """思い出し方の値。
 
-    評価セットで測って決めた。意味を見る埋め込みでは、下限は 0.48 から 0.52
-    の帯で、架空の評価セットと実際の会話から作った評価セットのどちらでも
-    無関係な記憶が混ざらない。0.46 で混ざりはじめ、0.54 で必要なものが出なく
-    なる。帯の真ん中を採る。埋め込みを替えたら測り直す。値の意味は埋め込み
-    ごとに違う。
+    評価セットで測って決めた。既定の埋め込み（`ruri-v3-30m`、INC-031）では、実際の
+    会話から作った評価セット（29 問）で下限 0.85 のとき 22 問を満たし無関係な記憶が
+    混ざらない。0.84 で混ざりはじめ（2 問）、0.86 で必要なものが出なくなる（16 問）。
+    帯は一点しか無く薄い。この埋め込みは近さの値の幅が狭く（無関係でも 0.76 ほど、
+    言い換えで 0.85 前後）、0.01 の違いが効く。架空の評価セット（5 問）は 0.85 で
+    全問を満たす。埋め込みを替えたら測り直す。値の意味は埋め込みごとに違う（前の
+    多言語の AIモデルでは 0.48 から 0.52 の帯だった）。
 
     直近の往復数は 2 から 6 で差が出ず、8 で期待する記憶が直近へ入って測れなく
     なった。一度に渡す件数は 3、5、8 で差が出なかった。
@@ -107,7 +148,7 @@ class HowToRecall:
 
     recent_turns: int = 6
     found_limit: int = 5
-    relevance_floor: float = 0.50
+    relevance_floor: float = 0.85
 
 
 @dataclass(frozen=True)

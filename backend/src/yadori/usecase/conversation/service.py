@@ -86,7 +86,7 @@ class Conversation:
         rebuilt = 0
         for way in self._ways:
             for episode in self._memories.episodes_without_index(dweller_id, way.name):
-                self._memories.write_index(episode.id, way.name, way.of(episode.utterance))
+                self._memories.write_index(episode.id, way.name, way.to_remember(episode.utterance))
                 rebuilt += 1
         return rebuilt
 
@@ -127,7 +127,7 @@ class Conversation:
         hits = self._memories.search(
             dweller_id,
             way.name,
-            way.of(utterance),
+            way.to_recall(utterance),
             self._how.found_limit,
             self._how.relevance_floor,
             exclude=skip,
@@ -179,7 +179,7 @@ class Conversation:
 
         原文を書く前に呼ぶ。埋め込みを使えないときは、ここで断って何も書かない。
         """
-        return tuple((way.name, way.of(utterance)) for way in self._ways)
+        return tuple((way.name, way.to_remember(utterance)) for way in self._ways)
 
     def _write_index(self, episode: Episode, made: tuple[tuple[str, Vector], ...]) -> None:
         """作っておいた数の並びをインデックスとして書く。

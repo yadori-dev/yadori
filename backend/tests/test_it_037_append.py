@@ -40,6 +40,7 @@ from tests.records import (
     claude_code_lines,
     write,
 )
+from tests.sora import fixed as factory_of
 from yadori.adapter.embedding import CharacterPairs, Multilingual
 from yadori.adapter.embedding import multilingual as multilingual_module
 from yadori.adapter.evaluation import (
@@ -206,7 +207,11 @@ class _Unavailable:
     def name(self) -> str:
         return PAIRS.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         del text
         raise EmbeddingsUnavailable("入れてください")
 
@@ -642,7 +647,7 @@ class TestIT037006:
                 out,
                 append=append,
                 judge=judge,
-                embeddings=CharacterPairs(),
+                default=factory_of(CharacterPairs()),
                 how=HOW,
                 writing=written,
             )

@@ -19,6 +19,7 @@ from tests.records import (
     claude_code_lines,
     write,
 )
+from tests.sora import fixed
 from yadori.adapter.embedding import CharacterPairs
 from yadori.domain.evaluation import Judge
 from yadori.domain.memory import Embeddings, HowToRecall, Provenance, Vector
@@ -70,8 +71,12 @@ class Relabeled:
     def name(self) -> str:
         return self._provenance.index_name
 
-    def of(self, text: str) -> Vector:
-        return self._inner.of(text)
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
+        return self._inner.to_remember(text)
 
 
 def first_records(place: Path) -> Path:
@@ -105,7 +110,7 @@ def drafted(
             out,
             append=append,
             judge=judge or FixedJudge(FIRST_JUDGE),
-            embeddings=embeddings or CharacterPairs(),
+            default=fixed(embeddings or CharacterPairs()),
             how=how or HOW,
             writing=written,
         ).run()

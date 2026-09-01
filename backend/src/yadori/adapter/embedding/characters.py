@@ -29,7 +29,14 @@ class CharacterPairs:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_remember(self, text: str) -> Vector:
+        return self._of(text)
+
+    def to_recall(self, text: str) -> Vector:
+        # 語の重なりに側の違いは無い。添え書きも定めない。
+        return self._of(text)
+
+    def _of(self, text: str) -> Vector:
         counts: Counter[int] = Counter()
         stripped = "".join(text.split())
         for index in range(max(len(stripped) - 1, 0)):

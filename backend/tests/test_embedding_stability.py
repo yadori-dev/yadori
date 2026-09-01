@@ -14,7 +14,7 @@ import pytest
 
 READ_ONE = (
     "from yadori.adapter.embedding.characters import CharacterPairs;"
-    "print([round(v, 6) for v in CharacterPairs().of('トマトを植えました')])"
+    "print([round(v, 6) for v in CharacterPairs().to_remember('トマトを植えました')])"
 )
 
 

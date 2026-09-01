@@ -32,7 +32,7 @@ from yadori.domain.evaluation import (
     Exchange,
     RecallEval,
 )
-from yadori.domain.memory import HowToRecall, Provenance
+from yadori.domain.memory import HowToRecall, Prefixes, Provenance
 
 HEADING = (
     "# 実際の会話の記録から作った評価セットの下書き。手元に置き、リポジトリへ入れない。\n"
@@ -206,6 +206,18 @@ class DraftFile:
             [
                 f"tool = {self._quoted(drawn.provenance.tool)}",
                 f"tool_version = {self._quoted(drawn.provenance.tool_version)}",
+            ]
+        )
+        if drawn.provenance.prefixes is not None:
+            # 添え書きを定めない埋め込みでは鍵を省く。鍵の無い前回の下書きは添え書き無しとして読む。
+            pieces.extend(
+                [
+                    f"remember = {self._quoted(drawn.provenance.prefixes.remember)}",
+                    f"recall = {self._quoted(drawn.provenance.prefixes.recall)}",
+                ]
+            )
+        pieces.extend(
+            [
                 f"recent = {drawn.how.recent_turns}",
                 f"limit = {drawn.how.found_limit}",
                 f"floor = {drawn.how.relevance_floor}",
@@ -294,6 +306,7 @@ class _CoveredTable:
                 ai_model=ai_model,
                 tool=self._text(drawn, "tool"),
                 tool_version=self._text(drawn, "tool_version"),
+                prefixes=self._prefixes(drawn),
             ),
             how=HowToRecall(
                 recent_turns=self._int(drawn, "recent"),
@@ -319,6 +332,15 @@ class _CoveredTable:
                 raise self._broken(key)
             found.append(name)
         return tuple(found)
+
+    def _prefixes(self, drawn: dict[str, object]) -> Prefixes | None:
+        """添え書きの組。両方の鍵が無ければ無し。片方だけなら壊れている。"""
+        remember, recall = drawn.get("remember"), drawn.get("recall")
+        if remember is None and recall is None:
+            return None
+        if not isinstance(remember, str) or not isinstance(recall, str):
+            raise self._broken("drawn_with.remember / recall")
+        return Prefixes(remember=remember, recall=recall)
 
     def _int(self, table: dict[str, object], key: str) -> int:
         value = table.get(key)

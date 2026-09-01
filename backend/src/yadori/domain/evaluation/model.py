@@ -281,8 +281,8 @@ class Overlap:
 class DrawnWith:
     """候補の引き方。何で候補を引き、何で判定したか。下書きの前回の範囲に残る。
 
-    追記を断るのは、埋め込みの AIモデルか道具の名前、思い出し方、判定の AIモデルが
-    違うとき。道具の版だけの違いは断らず注意にする。版で断ると依存を上げるたびに
+    追記を断るのは、埋め込みの AIモデルか道具の名前か添え書き、思い出し方、判定の
+    AIモデルが違うとき。道具の版だけの違いは断らず注意にする。版で断ると依存を上げるたびに
     確認済みの問が無駄になる。
     """
 
@@ -301,6 +301,12 @@ class DrawnWith:
         if self.provenance.tool != now.provenance.tool:
             found.append(
                 f"埋め込みを動かす道具（前回 {self.provenance.tool}、今回 {now.provenance.tool}）"
+            )
+        if self.provenance.prefixes != now.provenance.prefixes:
+            # 添え書きが違えば数の並びの作り方が違い、候補の引き方も変わる。
+            found.append(
+                f"添え書き（前回 {self.provenance.prefixes_described}、"
+                + f"今回 {now.provenance.prefixes_described}）"
             )
         if self.how != now.how:
             found.append(

@@ -41,18 +41,27 @@ $ uv run python -m yadori
 
 ```console
 $ uv run python -m yadori measure
-埋め込み: paraphrase-multilingual-MiniLM-L12-v2/fastembed-0.8.0
-条件: 直近6往復・上限5件・下限0.5
-5問中 4問で期待したやりとりが上位3件に入った
+埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） 添え書き: 覚える「検索文書: 」 問い合わせ「検索クエリ: 」
+大きさ 0.15GB / 読み込み 0.416秒 / 一発話 0.003秒
+条件: 直近6往復・上限5件・下限0.85
+5問中 5問で期待したやりとりが上位3件に入った
 出てはいけないやりとりが出た問: 0問
-  満たさず: 「手続きの話を引く」期待: tax 出ず
 
-$ uv run python -m yadori measure --floor 0.40
+$ uv run python -m yadori measure --floor 0.80
 （今の条件と、下限を変えた条件の差を問ごとに出す）
 
 $ uv run python -m yadori measure --embedding characters --floor 0.21
 （語の重なりだけを見る埋め込みで測る。下限の意味は埋め込みごとに違うため、添えて指す）
+
+$ uv run python -m yadori measure --eval <手元の評価セット> --embedding multilingual --floor 0.50
+（前の多言語の AIモデルで測る。未取得なら「取得します」と大きさと取得先を出してから取得する）
+埋め込み: paraphrase-multilingual-MiniLM-L12-v2（fastembed-0.8.0） 添え書き: 無し
+大きさ 0.25GB / 読み込み 0.921秒 / 一発話 0.076秒
+条件: 直近6往復・上限5件・下限0.85
+…
 ```
+
+`--embedding` には、`characters`（語の重なり）、`multilingual`（前の多言語の AIモデル `paraphrase-multilingual-MiniLM-L12-v2`）、試す埋め込みの名前（`ruri-v3-30m`（既定）、`ruri-v3-130m`、`multilingual-e5-small`）、埋め込みを動かす道具の対応表にある AIモデルの `配布元/名前` を指せます。`+` で並べると両方の道から渡します。指せない名前を渡すと、指せる名前の一覧が返ります。結果の冒頭には、埋め込みの出自（AIモデルの名前、動かした道具の名前と版）、添え書き（その AIモデルが文の前に付けるよう定めている決まった語。覚える側と問い合わせ側で違うものがある）、取得した物の大きさ、AIモデルの読み込みにかかった時間、一発話を数の並びにする時間が並びます。近さの下限の意味は埋め込みごとに違うので、数だけを見比べず、埋め込みごとに下限を振って比べてください。
 
 リポジトリの `evals/recall.toml` は架空の会話です。実際の会話から作った評価セットは手元に置き、`--eval` で指してください。架空の会話は書いた本人が話題も語も選ぶため都合よく当たり、そこで測った値は実際の会話での質を保証しません。
 
@@ -62,7 +71,7 @@ AIモデルは初回に取得し、`YADORI_HOME` の下の `models/` に置き�
 
 ```console
 $ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml
-候補を引いた 埋め込み: paraphrase-multilingual-MiniLM-L12-v2（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
+候補を引いた 埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
 記録: 28 セッション、中身のある発話 151 件（読めず飛ばしたファイル 0）
 覚えさせる発話: 106 件
 問: 44 問（後の発話が前の話題を指していそうなもの。すべて確認前）
@@ -78,7 +87,7 @@ $ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の
 
 ```console
 $ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml --append
-候補を引いた 埋め込み: paraphrase-multilingual-MiniLM-L12-v2（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
+候補を引いた 埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
 前回の範囲: 2026-08-31 15:20 まで、<記録のディレクトリ>、飛ばしたファイル 0、28 セッション
 前回の下書き: 覚えさせる発話 106 件、問 44 問
 今回: 新しい記録 3 セッション、新しい発話 21 件（読めず飛ばしたファイル 0）、判定へ渡した発話 15 件、候補が無く渡さなかった発話 6 件
@@ -87,7 +96,7 @@ $ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の
   ~/yadori-evals/real-recall.toml の新しい問を読み、残す問は confirmed = true にしてください
 ```
 
-追記できるのは `[covered]` を持つ下書きだけです。埋め込みの AIモデルや条件、判定の AIモデル、記録のディレクトリが前回と違うときは足さず、新しいファイルへ作り直すよう伝えます。埋め込みを動かす道具の版だけが違うときは足し、注意を出します。少しずつ追記するより多く貯めてから追記する方が、直近の範囲で外れる組が少なく、問は多く取れます。
+追記できるのは `[covered]` を持つ下書きだけです。埋め込みの AIモデルや添え書き、条件、判定の AIモデル、記録のディレクトリが前回と違うときは足さず、新しいファイルへ作り直すよう伝えます。既定の埋め込みを替えた後は、前の埋め込みで作った下書きには追記できず、作り直しになります。埋め込みを動かす道具の版だけが違うときは足し、注意を出します。少しずつ追記するより多く貯めてから追記する方が、直近の範囲で外れる組が少なく、問は多く取れます。
 
 判定のために渡るのは、後の発話と数件の候補の文章だけです。Claude Code の記録は普段と同じ相手へ渡りますが、Codex の記録は判定のために別の相手へ渡ることになります。返事、時刻、作業場所は渡らず、記録を丸ごと渡すこともありません。出力先はリポジトリの外を指してください。`--append` を付けないときは、既にあるファイルには書きません。
 

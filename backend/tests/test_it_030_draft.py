@@ -26,6 +26,7 @@ from tests.records import (
     rows_of,
     write,
 )
+from tests.sora import fixed
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.evaluation import (
     ClaudeCodeJudge,
@@ -144,7 +145,11 @@ class _FirstCharacter:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         code = ord(text[0]) if text else 0
         return tuple(1.0 if place == code % 64 else 0.0 for place in range(64))
 
@@ -159,7 +164,11 @@ class _Unavailable:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         del text
         raise EmbeddingsUnavailable("入れてください")
 
@@ -416,7 +425,7 @@ class TestIT030006:
                 [place],
                 out,
                 judge=FixedJudge({A2: [A]}),
-                embeddings=CharacterPairs(),
+                default=fixed(CharacterPairs()),
                 how=TEST_HOW,
                 writing=written,
             ).run()
@@ -424,14 +433,14 @@ class TestIT030006:
                 [tmp_path / "nowhere"],
                 tmp_path / "x.toml",
                 judge=FixedJudge({}),
-                embeddings=CharacterPairs(),
+                default=fixed(CharacterPairs()),
                 writing=io.StringIO(),
             ).run()
             zero = Drafter(
                 [place],
                 tmp_path / "zero.toml",
                 judge=FixedJudge({}),
-                embeddings=CharacterPairs(),
+                default=fixed(CharacterPairs()),
                 how=TEST_HOW,
                 writing=io.StringIO(),
             ).run()
