@@ -5,9 +5,13 @@
 """
 
 from yadori.domain.memory.model import (
+    CHARACTER_HALF_LIFE,
+    CHARACTER_WEIGHT,
     MOOD_HALF_LIFE,
+    Character,
     Dweller,
     Episode,
+    Fading,
     Found,
     HowToRecall,
     Identity,
@@ -18,6 +22,7 @@ from yadori.domain.memory.model import (
     Recollection,
     Retrieval,
     Shift,
+    State,
     Vector,
 )
 from yadori.domain.memory.ports import (
@@ -28,11 +33,15 @@ from yadori.domain.memory.ports import (
 )
 
 __all__ = [
+    "CHARACTER_HALF_LIFE",
+    "CHARACTER_WEIGHT",
     "MOOD_HALF_LIFE",
+    "Character",
     "Dweller",
     "Embeddings",
     "EmbeddingsUnavailable",
     "Episode",
+    "Fading",
     "Found",
     "HowToRecall",
     "Identity",
@@ -45,5 +54,6 @@ __all__ = [
     "Recollection",
     "Retrieval",
     "Shift",
+    "State",
     "Vector",
 ]

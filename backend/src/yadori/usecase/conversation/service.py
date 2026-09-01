@@ -14,18 +14,17 @@ from datetime import datetime
 from typing import final
 
 from yadori.domain.memory import (
-    MOOD_HALF_LIFE,
     Embeddings,
     Episode,
     Found,
     HowToRecall,
     Identity,
     Memories,
-    Mood,
     Moved,
     NameNotDeclared,
     Recollection,
     Shift,
+    State,
     Vector,
 )
 
@@ -57,15 +56,15 @@ class Conversation:
         - 名乗りを確かめる
         - 直近のやりとりを取る
         - それより前から意味で探す
-        - 今の気持ちを求める
+        - 今の状態（気持ちと性格）を求める
         - 思い出したことを記録する
         """
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
         found = self._found_beyond(dweller_id, utterance, recent)
-        mood = self.mood(dweller_id)
+        state = self.state(dweller_id)
         self._record_retrieval(found)
-        return Recollection(identity=identity, recent=recent, found=found, mood=mood)
+        return Recollection(identity=identity, recent=recent, found=found, state=state)
 
     def remember(
         self, dweller_id: str, utterance: str, reply: str, moved: Moved | None = None
@@ -86,9 +85,9 @@ class Conversation:
             self._shift(dweller_id, episode, moved)
         return episode
 
-    def mood(self, dweller_id: str) -> Mood:
-        """今の気持ち。積まれた動きと経過時間から求め、保存しない（ADR-007）。"""
-        return Mood.from_shifts(self._memories.shifts(dweller_id), self._now(), MOOD_HALF_LIFE)
+    def state(self, dweller_id: str) -> State:
+        """今の状態。気持ちと性格を、積まれた動きと経過時間から求め、保存しない（ADR-007）。"""
+        return State.from_shifts(self._memories.shifts(dweller_id), self._now())
 
     def rebuild_index(self, dweller_id: str) -> int:
         """インデックスを原文から作り直す。

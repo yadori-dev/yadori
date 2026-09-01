@@ -66,7 +66,7 @@ class Terminal:
         self._say(f"{self._dweller.nickname}: {response.reply}")
         self._say(
             f"（気持ち: {response.moved.delta:+.1f} {response.moved.cause}"
-            + f" → いま {response.mood.value:+.2f}）"
+            + f" → いま {response.state.mood.value:+.2f}）"
         )
 
     def _say(self, line: str) -> None:

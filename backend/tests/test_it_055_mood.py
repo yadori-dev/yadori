@@ -13,7 +13,7 @@ from yadori.adapter.store import InMemoryMemories, SqliteMemories
 from yadori.adapter.voice import ClaudeCodeVoice
 from yadori.domain.conversation import CannotSpeak, Spoken
 from yadori.domain.memory import (
-    MOOD_HALF_LIFE,
+    Character,
     Dweller,
     Identity,
     Memories,
@@ -21,6 +21,7 @@ from yadori.domain.memory import (
     Moved,
     Recollection,
     Shift,
+    State,
 )
 from yadori.usecase.conversation import Conversation, Turn
 
@@ -85,16 +86,16 @@ class TestIT055001:
         kept = [store.shifts(SORA.id) for store in stores]
         assert kept[0] == kept[1] == tuple(moves)
         now = AT + timedelta(minutes=10)
-        values = [Mood.from_shifts(one, now, MOOD_HALF_LIFE).value for one in kept]
+        values = [Mood.from_shifts(one, now).value for one in kept]
         assert values[0] == pytest.approx(values[1])
         assert values[0] == pytest.approx(-0.3 * 0.5 ** (600 / 21600) + 0.5 * 0.5 ** (300 / 21600))
 
     def test_IT_055_001_動きが無ければ0で和が越えれば収まる(self) -> None:
-        assert Mood.from_shifts((), AT, MOOD_HALF_LIFE).value == 0.0
+        assert Mood.from_shifts((), AT).value == 0.0
         piled = [Shift(AT, 0.8, "a", None), Shift(AT, 0.8, "b", None)]
-        assert Mood.from_shifts(piled, AT, MOOD_HALF_LIFE).value == 1.0
+        assert Mood.from_shifts(piled, AT).value == 1.0
         sunk = [Shift(AT, -0.8, "a", None), Shift(AT, -0.8, "b", None)]
-        assert Mood.from_shifts(sunk, AT, MOOD_HALF_LIFE).value == -1.0
+        assert Mood.from_shifts(sunk, AT).value == -1.0
         assert Mood(0.0).described == "落ち着いている"
         assert Mood(-0.3).described == "沈んでいる" and Mood(0.3).described == "明るい"
 
@@ -115,7 +116,7 @@ class TestIT055002:
         shifts = memories.shifts(SORA.id)
         assert len(shifts) == 1
         assert shifts[0].episode_id == moved.id and shifts[0].cause == "ほっとした"
-        assert recollected.mood.value == pytest.approx(0.5)
+        assert recollected.state.mood.value == pytest.approx(0.5)
         assert isinstance(recollected.identity, Identity)
 
 
@@ -123,7 +124,9 @@ class TestIT055003:
     """声の切り出しと、一往復の受け渡し。"""
 
     def _recollection(self, mood: float = 0.0) -> Recollection:
-        return Recollection(Identity(1, "わたしはそらです。"), (), (), Mood(mood))
+        return Recollection(
+            Identity(1, "わたしはそらです。"), (), (), State(Mood(mood), Character(0.0))
+        )
 
     @pytest.mark.parametrize(
         ("answered", "reply", "delta", "cause"),
@@ -178,6 +181,6 @@ class TestIT055003:
         response = turn.respond_to(SORA.id, "やっと通った")
 
         assert response.moved == Moved(0.4, "うれしい")
-        assert response.mood.value == pytest.approx(0.4)
-        assert response.recollection.mood.value == 0.0
+        assert response.state.mood.value == pytest.approx(0.4)
+        assert response.recollection.state.mood.value == 0.0
         assert memories.shifts(SORA.id)[0].episode_id == response.episode.id
