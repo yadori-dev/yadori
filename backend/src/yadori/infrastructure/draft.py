@@ -8,11 +8,11 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TextIO, final
 
-from yadori.adapter.embedding import Multilingual
+from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.evaluation import ClaudeCodeJudge, ClaudeCodeRecords, CodexRecords, DraftFile
 from yadori.adapter.store import InMemoryMemories
 from yadori.adapter.tool import ClaudeCodeCall
@@ -39,7 +39,7 @@ class Drafter:
         out: Path,
         append: bool = False,
         judge: Judge | None = None,
-        embeddings: Embeddings | None = None,
+        default: Callable[[Path | None, Announcing | None], Embeddings] | None = None,
         how: HowToRecall | None = None,
         writing: TextIO | None = None,
     ) -> None:
@@ -50,23 +50,25 @@ class Drafter:
         self._judge: Judge = judge or ClaudeCodeJudge(
             ClaudeCodeCall(DEFAULT_MODEL, JUDGE_WAIT_SECONDS)
         )
-        self._embeddings: Embeddings = embeddings or Multilingual(
-            cache_dir=SettingsFile().models_path
+        # 既定の埋め込みは起動と同じ工場が組む。既定を替えたら下書きも同じ埋め込みで引く。
+        # 組むのは run の中。道具が無ければそこで理由を書いて終わるためである。
+        self._default: Callable[[Path | None, Announcing | None], Embeddings] = (
+            default or DefaultEmbeddings()
         )
         self._how: HowToRecall = how or DRAFT_HOW
         self._writing: TextIO = writing or sys.stdout
 
     def run(self) -> int:
         """作るか足して、数を書く。"""
-        drafting = Drafting(
-            [ClaudeCodeRecords(), CodexRecords()],
-            self._judge,
-            DraftFile(),
-            self._embeddings,
-            InMemoryMemories,
-            self._how,
-        )
         try:
+            drafting = Drafting(
+                [ClaudeCodeRecords(), CodexRecords()],
+                self._judge,
+                DraftFile(),
+                self._default(SettingsFile().models_path, print),
+                InMemoryMemories,
+                self._how,
+            )
             if self._append:
                 self._appended(drafting.append(self._places, self._out), drafting)
             else:

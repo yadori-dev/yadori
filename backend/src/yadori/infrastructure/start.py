@@ -7,25 +7,30 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import final
 
-from yadori.adapter.embedding import Multilingual
+from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.place import Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.voice import ClaudeCodeVoice
-from yadori.domain.memory import EmbeddingsUnavailable
+from yadori.domain.memory import Embeddings, EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.conversation import Conversation, Turn
+
+Factory = Callable[[Path | None, Announcing | None], Embeddings]
 
 
 @final
 class Startup:
     """宿りを起こして、話しかけられるのを待つ。"""
 
-    def __init__(self, home: Path | None = None) -> None:
+    def __init__(self, home: Path | None = None, default: Factory | None = None) -> None:
         self._settings_file: SettingsFile = SettingsFile(home)
+        # 既定の埋め込みは工場が組む。下書きの入口と名前で選ぶ部品も同じ工場を使う。
+        self._default: Factory = default or DefaultEmbeddings()
 
     def run(self) -> int:
         """起こして、待つ。
@@ -82,13 +87,16 @@ class Startup:
     def _assemble(self, memories: SqliteMemories, settings: Settings) -> Turn:
         """思い出すと覚えるを繋いで、一往復の手順にする。
 
-        埋め込みは意味を見る実装を手元で動かす。AIモデルのファイルは `YADORI_HOME` の下の
-        `models/` に保存する。
+        埋め込みは既定の工場が組む。AIモデルのファイルは `YADORI_HOME` の下の `models/` に
+        保存し、初回の取得が黙って進まないよう前触れは画面へ出す。
         応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
-        embeddings = Multilingual(cache_dir=settings.models_path)
-        conversation = Conversation(memories, embeddings, self._now)
+        conversation = Conversation(memories, self.embeddings(settings), self._now)
         return Turn(conversation, ClaudeCodeVoice(settings.model))
+
+    def embeddings(self, settings: Settings) -> Embeddings:
+        """宿りが使う埋め込み。既定の工場が組む。"""
+        return self._default(settings.models_path, print)
 
     def _now(self) -> datetime:
         return datetime.now(UTC)

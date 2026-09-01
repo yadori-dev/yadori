@@ -8,7 +8,8 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-from yadori.adapter.embedding import CharacterPairs
+from tests.sora import Steady
+from yadori.adapter.embedding import CharacterPairs, Weighing
 from yadori.domain.memory import HowToRecall
 from yadori.infrastructure.measure import Measure
 
@@ -87,7 +88,7 @@ class TestMeasure:
             eval_path=path,
             baseline=BASELINE,
             changed=changed,
-            embeddings=CharacterPairs(),
+            embeddings=Weighing(CharacterPairs(), clock=Steady()),
             writing=writing,
         ).run()
         return writing.getvalue(), code

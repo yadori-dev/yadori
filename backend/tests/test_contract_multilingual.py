@@ -38,7 +38,7 @@ class TestMultilingualContract:
     def test_数の並びの長さと名前が固定した観測と一致する(self) -> None:
         embeddings = Multilingual(cache_dir=_models_path())
 
-        made = embeddings.of(PLANTED)
+        made = embeddings.to_remember(PLANTED)
 
         assert len(made) == DIMENSIONS
         assert embeddings.name.startswith("paraphrase-multilingual-MiniLM-L12-v2/fastembed-0.8.")
@@ -47,9 +47,9 @@ class TestMultilingualContract:
         embeddings = Multilingual(cache_dir=_models_path())
         closeness = Closeness()
 
-        planted = embeddings.of(PLANTED)
-        paraphrased = closeness.between(planted, embeddings.of(PARAPHRASED))
-        unrelated = closeness.between(planted, embeddings.of(UNRELATED))
+        planted = embeddings.to_remember(PLANTED)
+        paraphrased = closeness.between(planted, embeddings.to_remember(PARAPHRASED))
+        unrelated = closeness.between(planted, embeddings.to_remember(UNRELATED))
 
         assert paraphrased == pytest.approx(PARAPHRASED_CLOSENESS, abs=0.02)
         assert paraphrased > FLOOR
@@ -60,6 +60,6 @@ class TestMultilingualContract:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("HF_TOKEN", raising=False)
 
-        made = Multilingual(cache_dir=_models_path()).of(PLANTED)
+        made = Multilingual(cache_dir=_models_path()).to_remember(PLANTED)
 
         assert len(made) == DIMENSIONS

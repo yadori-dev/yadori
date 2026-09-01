@@ -82,7 +82,9 @@ class Memories(Protocol):
 class Embeddings(Protocol):
     """文章を、意味の近いものどうしが近くなる数値の並びへ変える。
 
-    何で作ったか（出自）を自分で答える。インデックスの名前は出自から組んだものである。
+    口は覚える側と問い合わせ側の二つ。添え書きを定める AIモデルは側ごとに別の語を
+    付けるため、呼ぶ側は側だけを伝え、語の中身は知らない。何で作ったか（出自）を
+    自分で答える。インデックスの名前は出自から組んだものである。
     """
 
     @property
@@ -91,4 +93,10 @@ class Embeddings(Protocol):
     @property
     def name(self) -> str: ...
 
-    def of(self, text: str) -> Vector: ...
+    def to_remember(self, text: str) -> Vector:
+        """覚える文と、作り直す文を数の並びにする。"""
+        ...
+
+    def to_recall(self, text: str) -> Vector:
+        """話しかけられた文章を数の並びにする。"""
+        ...

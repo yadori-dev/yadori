@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 from typing import final
 
-from yadori.adapter.embedding import CharacterPairs, Multilingual
-from yadori.domain.memory import Embeddings, HowToRecall
+from yadori.adapter.embedding import Choosing, NotAnEmbeddingName, Weighing
+from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.measure import Measure
 from yadori.infrastructure.settings import SettingsFile
@@ -26,6 +26,10 @@ USAGE = (
     + "\n"
     + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
     + "  セットは手元に置き、--eval で指す。リポジトリへ入れない。\n"
+    + "  --embedding は characters、multilingual、試す埋め込みの名前、埋め込みを\n"
+    + "  動かす道具の対応表にある 配布元/名前 を指せる。+ で並べると両方の道から\n"
+    + "  渡す。省くと既定の埋め込みで測る。結果には出自、添え書き、大きさ、\n"
+    + "  読み込みと一発話の時間が並ぶ。\n"
     + "\n"
     + "  python -m yadori evals draft --from PATH [--from PATH] --out FILE [--append]\n"
     + "                                      対話する道具の記録から、評価セットの\n"
@@ -47,8 +51,13 @@ USAGE = (
 
 @final
 class Entry:
-    def __init__(self, argv: list[str]) -> None:
+    def __init__(self, argv: list[str], choosing: Choosing | None = None) -> None:
         self._argv: list[str] = argv[1:]
+        # 会話と同じ `YADORI_HOME` の下の `models/` を取得先にし、取得の前触れは標準出力へ出す。
+        # 測った結果の書き先とは別である。
+        self._choosing: Choosing = choosing or Choosing(
+            SettingsFile().models_path, announcing=print
+        )
 
     def run(self) -> int:
         """何をするかを選んで渡す。
@@ -97,44 +106,24 @@ class Entry:
             return 1
         given = dict(zip(rest[::2], rest[1::2], strict=True))
         eval_path = self._eval_path(given)
-        embeddings = self._embeddings(given)
-        if embeddings is None:
-            print(USAGE, file=sys.stderr)
+        written = given.pop("--embedding", None)
+        changed = None
+        if given:
+            changed = self._changed(given)
+            if changed is None:
+                print(USAGE, file=sys.stderr)
+                return 1
+        try:
+            embeddings = self._embeddings(written)
+        except (NotAnEmbeddingName, EmbeddingsUnavailable) as reason:
+            # 名前の書き方ではなく中身の誤りなので、使い方ではなく理由を出す。
+            print(f"測れません: {reason}", file=sys.stderr)
             return 1
-        if not given:
-            return Measure(eval_path=eval_path, embeddings=embeddings).run()
-        changed = self._changed(given)
-        if changed is None:
-            print(USAGE, file=sys.stderr)
-            return 1
-        return Measure(eval_path=eval_path, changed=changed, embeddings=embeddings).run()
+        return Measure(embeddings, eval_path=eval_path, changed=changed).run()
 
-    def _embeddings(self, given: dict[str, str]) -> Embeddings | list[Embeddings] | None:
-        """どの道で測るか。加算で並べると、両方の道から渡す形になる。"""
-        chosen = given.pop("--embedding", None)
-        if chosen is None:
-            return self._multilingual()
-        ways = [self._one(name) for name in chosen.split("+")]
-        if any(way is None for way in ways):
-            return None
-        picked = [way for way in ways if way is not None]
-        return picked[0] if len(picked) == 1 else picked
-
-    def _one(self, name: str) -> Embeddings | None:
-        if name == "characters":
-            return CharacterPairs()
-        if name == "multilingual":
-            return self._multilingual()
-        if "/" in name:
-            return self._multilingual(name)
-        return None
-
-    def _multilingual(self, model: str | None = None) -> Multilingual:
-        """会話と同じ `YADORI_HOME` の下の `models/` にある AIモデルで測る。取り直さない。"""
-        cache_dir = SettingsFile().models_path
-        if model is None:
-            return Multilingual(cache_dir=cache_dir)
-        return Multilingual(model, cache_dir=cache_dir)
+    def _embeddings(self, written: str | None) -> Weighing | list[Weighing]:
+        """名前から埋め込みを選ぶ。"""
+        return self._choosing.pick(written)
 
     def _eval_path(self, given: dict[str, str]) -> Path | None:
         """どの評価セットを測るか。省けばリポジトリの架空のものを測る。"""

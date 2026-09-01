@@ -43,8 +43,12 @@ class _Reversed:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
-        return self._inner.of(text[::-1])
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
+        return self._inner.to_remember(text[::-1])
 
 
 @final
@@ -59,7 +63,11 @@ class _Missing:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         del text
         raise EmbeddingsUnavailable("入れてください")
 

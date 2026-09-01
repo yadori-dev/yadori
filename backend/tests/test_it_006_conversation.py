@@ -74,7 +74,11 @@ class _SwappedEmbeddings:
     def name(self) -> str:
         return self.provenance.index_name
 
-    def of(self, text: str) -> Vector:
+    def to_recall(self, text: str) -> Vector:
+
+        return self.to_remember(text)
+
+    def to_remember(self, text: str) -> Vector:
         counts: list[float] = [0.0] * 512
         for character in "".join(text.split()):
             counts[hash(character) % 512] += 1.0
