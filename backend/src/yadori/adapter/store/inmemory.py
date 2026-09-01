@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
-from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Shift, Vector
+from yadori.domain.memory import Dream, Dweller, Episode, Gist, Identity, Retrieval, Shift, Vector
 
 
 @dataclass
@@ -23,6 +23,8 @@ class _Kept:
     index: dict[tuple[int, str], Vector] = field(default_factory=dict)
     retrievals: list[tuple[int, datetime]] = field(default_factory=list)
     shifts: list[tuple[str, Shift]] = field(default_factory=list)
+    dreams: list[tuple[str, Dream]] = field(default_factory=list)
+    gists: list[tuple[str, int, Gist]] = field(default_factory=list)
     next_id: int = 1
 
 
@@ -134,3 +136,31 @@ class InMemoryMemories:
     def episode(self, episode_id: int) -> Episode | None:
         kept = self._kept.episodes.get(episode_id)
         return None if kept is None else kept[1]
+
+    def episodes_after(self, dweller_id: str, at: datetime | None) -> tuple[Episode, ...]:
+        owned = [one for one in self._owned(dweller_id) if at is None or one.happened_at > at]
+        return tuple(sorted(owned, key=lambda episode: (episode.happened_at, episode.id)))
+
+    def record_dream(
+        self,
+        dweller_id: str,
+        at: datetime,
+        read_from: datetime,
+        read_to: datetime,
+        count: int,
+        kept: int,
+        noticing: str | None,
+    ) -> Dream:
+        numbered = Dream(len(self._kept.dreams) + 1, at, read_from, read_to, count, kept, noticing)
+        self._kept.dreams.append((dweller_id, numbered))
+        return numbered
+
+    def latest_dream(self, dweller_id: str) -> Dream | None:
+        owned = [dream for owner, dream in self._kept.dreams if owner == dweller_id]
+        return owned[-1] if owned else None
+
+    def record_gist(self, dweller_id: str, dream_id: int, gist: Gist) -> None:
+        self._kept.gists.append((dweller_id, dream_id, gist))
+
+    def gists_of_dream(self, dream_id: int) -> tuple[Gist, ...]:
+        return tuple(gist for _, owner_dream, gist in self._kept.gists if owner_dream == dream_id)

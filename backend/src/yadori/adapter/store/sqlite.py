@@ -13,7 +13,16 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
-from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Shift, Vector
+from yadori.domain.memory import (
+    Dream,
+    Dweller,
+    Episode,
+    Gist,
+    Identity,
+    Retrieval,
+    Shift,
+    Vector,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS dweller (
@@ -53,6 +62,28 @@ CREATE TABLE IF NOT EXISTS shift (
     delta REAL NOT NULL,
     cause TEXT NOT NULL,
     episode_id INTEGER REFERENCES episode(id)
+);
+CREATE TABLE IF NOT EXISTS dream (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dweller_id TEXT NOT NULL REFERENCES dweller(id),
+    at TEXT NOT NULL,
+    read_from TEXT NOT NULL,
+    read_to TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    kept INTEGER NOT NULL,
+    noticing TEXT
+);
+CREATE TABLE IF NOT EXISTS gist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dweller_id TEXT NOT NULL REFERENCES dweller(id),
+    dream_id INTEGER NOT NULL REFERENCES dream(id),
+    made_at TEXT NOT NULL,
+    text TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS gist_source (
+    gist_id INTEGER NOT NULL REFERENCES gist(id),
+    episode_id INTEGER NOT NULL REFERENCES episode(id),
+    PRIMARY KEY (gist_id, episode_id)
 );
 """
 
@@ -296,6 +327,92 @@ class SqliteMemories:
                 delta=row.real("delta"),
                 cause=row.text("cause"),
                 episode_id=row.number_or_none("episode_id"),
+            )
+            for row in rows
+        )
+
+    def episodes_after(self, dweller_id: str, at: datetime | None) -> tuple[Episode, ...]:
+        rows = self._all(
+            "SELECT id, utterance, reply, identity_version, happened_at FROM episode"
+            + " WHERE dweller_id = ? AND happened_at > ? ORDER BY happened_at, id",
+            (dweller_id, "" if at is None else at.isoformat()),
+        )
+        return tuple(self._as_episode(row) for row in rows)
+
+    def record_dream(
+        self,
+        dweller_id: str,
+        at: datetime,
+        read_from: datetime,
+        read_to: datetime,
+        count: int,
+        kept: int,
+        noticing: str | None,
+    ) -> Dream:
+        cursor = self._connection.execute(
+            "INSERT INTO dream (dweller_id, at, read_from, read_to, count, kept, noticing)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                dweller_id,
+                at.isoformat(),
+                read_from.isoformat(),
+                read_to.isoformat(),
+                count,
+                kept,
+                noticing,
+            ),
+        )
+        self._connection.commit()
+        if cursor.lastrowid is None:
+            raise RuntimeError("夢の番号が付かなかった")
+        return Dream(cursor.lastrowid, at, read_from, read_to, count, kept, noticing)
+
+    def latest_dream(self, dweller_id: str) -> Dream | None:
+        row = self._one(
+            "SELECT id, at, read_from, read_to, count, kept, noticing FROM dream"
+            + " WHERE dweller_id = ? ORDER BY id DESC LIMIT 1",
+            (dweller_id,),
+        )
+        if row is None:
+            return None
+        return Dream(
+            id=row.number("id"),
+            at=datetime.fromisoformat(row.text("at")),
+            read_from=datetime.fromisoformat(row.text("read_from")),
+            read_to=datetime.fromisoformat(row.text("read_to")),
+            count=row.number("count"),
+            kept=row.number("kept"),
+            noticing=row.text_or_none("noticing"),
+        )
+
+    def record_gist(self, dweller_id: str, dream_id: int, gist: Gist) -> None:
+        cursor = self._connection.execute(
+            "INSERT INTO gist (dweller_id, dream_id, made_at, text) VALUES (?, ?, ?, ?)",
+            (dweller_id, dream_id, gist.made_at.isoformat(), gist.text),
+        )
+        if cursor.lastrowid is None:
+            raise RuntimeError("要点の番号が付かなかった")
+        _ = self._connection.executemany(
+            "INSERT INTO gist_source (gist_id, episode_id) VALUES (?, ?)",
+            [(cursor.lastrowid, episode_id) for episode_id in gist.sources],
+        )
+        self._connection.commit()
+
+    def gists_of_dream(self, dream_id: int) -> tuple[Gist, ...]:
+        rows = self._all(
+            "SELECT id, made_at, text FROM gist WHERE dream_id = ? ORDER BY id", (dream_id,)
+        )
+        return tuple(
+            Gist(
+                text=row.text("text"),
+                made_at=datetime.fromisoformat(row.text("made_at")),
+                sources=tuple(
+                    source.number("episode_id")
+                    for source in self._all(
+                        "SELECT episode_id FROM gist_source WHERE gist_id = ? ORDER BY episode_id",
+                        (row.number("id"),),
+                    )
+                ),
             )
             for row in rows
         )

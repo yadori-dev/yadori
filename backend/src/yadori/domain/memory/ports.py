@@ -10,8 +10,10 @@ from datetime import datetime
 from typing import Protocol
 
 from yadori.domain.memory.model import (
+    Dream,
     Dweller,
     Episode,
+    Gist,
     Identity,
     Provenance,
     Retrieval,
@@ -89,6 +91,29 @@ class Memories(Protocol):
     def retrieval(self, episode_id: int) -> Retrieval: ...
 
     def record_shift(self, dweller_id: str, shift: Shift) -> None: ...
+
+    def episodes_after(self, dweller_id: str, at: datetime | None) -> tuple[Episode, ...]:
+        """時刻より後の出来事を古い順に。無しなら全部。"""
+        ...
+
+    def record_dream(
+        self,
+        dweller_id: str,
+        at: datetime,
+        read_from: datetime,
+        read_to: datetime,
+        count: int,
+        kept: int,
+        noticing: str | None,
+    ) -> Dream:
+        """夢を積み、番号の付いた記録を返す。"""
+        ...
+
+    def latest_dream(self, dweller_id: str) -> Dream | None: ...
+
+    def record_gist(self, dweller_id: str, dream_id: int, gist: Gist) -> None: ...
+
+    def gists_of_dream(self, dream_id: int) -> tuple[Gist, ...]: ...
 
     def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
         """動きを古い順に。"""

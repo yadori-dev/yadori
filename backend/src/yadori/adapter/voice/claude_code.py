@@ -62,6 +62,14 @@ class ClaudeCodeVoice:
             + f"（{mood.value:+.2f}。−1 が沈む、+1 が明るい）で、"
             + f"長い目で見た性格の傾向は「{character.described}」（{character.value:+.2f}）です。"
         )
+        if recollection.dream is not None and recollection.dream.gists:
+            dreamed = recollection.dream
+            preface.append(
+                f"\n最近の夢（{dreamed.dream.at.astimezone():%Y-%m-%d}）で記憶を読み直して残した要点です。"
+            )
+            preface.extend(f"- {gist.text}" for gist in dreamed.gists)
+            if dreamed.dream.noticing:
+                preface.append(f"そのとき気づいたこと: {dreamed.dream.noticing}")
         if recollection.found:
             preface.append(
                 "\n以下は、いま話しかけられた内容から思い出したことです。"

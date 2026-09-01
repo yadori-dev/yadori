@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import final
 
 from yadori.domain.memory import (
+    Dreamed,
     Embeddings,
     Episode,
     Found,
@@ -57,14 +58,16 @@ class Conversation:
         - 直近のやりとりを取る
         - それより前から意味で探す
         - 今の状態（気持ちと性格）を求める
+        - 最新の夢を添える
         - 思い出したことを記録する
         """
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
         found = self._found_beyond(dweller_id, utterance, recent)
         state = self.state(dweller_id)
+        dream = self._dreamed(dweller_id)
         self._record_retrieval(found)
-        return Recollection(identity=identity, recent=recent, found=found, state=state)
+        return Recollection(identity=identity, recent=recent, found=found, state=state, dream=dream)
 
     def remember(
         self, dweller_id: str, utterance: str, reply: str, moved: Moved | None = None
@@ -84,6 +87,13 @@ class Conversation:
         if moved is not None:
             self._shift(dweller_id, episode, moved)
         return episode
+
+    def _dreamed(self, dweller_id: str) -> Dreamed | None:
+        """最新の夢と、その夢で残した要点。夢が無ければ無し。"""
+        dream = self._memories.latest_dream(dweller_id)
+        if dream is None:
+            return None
+        return Dreamed(dream=dream, gists=self._memories.gists_of_dream(dream.id))
 
     def state(self, dweller_id: str) -> State:
         """今の状態。気持ちと性格を、積まれた動きと経過時間から求め、保存しない（ADR-007）。"""
