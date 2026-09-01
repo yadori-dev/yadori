@@ -11,17 +11,20 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding import Choosing, NotAnEmbeddingName, Weighing
+from yadori.adapter.place import DiscordGateway, DiscordPlace
 from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.dream import Dreamer
 from yadori.infrastructure.measure import Measure
-from yadori.infrastructure.settings import SettingsFile
+from yadori.infrastructure.settings import NotSettled, SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.infrastructure.state import StateReport
 
 USAGE = (
     "使い方:\n"
     + "  python -m yadori                    宿りを起こして話す\n"
+    + "  python -m yadori discord            Discord で話しかけられるのを待つ。トークンは\n"
+    + "                                      YADORI_HOME の discord.toml に置く\n"
     + "  python -m yadori dream              前回の夢より後の記憶を読み直し、気づきを一つ残す\n"
     + "  python -m yadori state [--at 時刻]  いまの気持ちと性格と、動きの時系列を読む。\n"
     + "                                      --at に ISO 形式の時刻を指すと、その時点の値\n"
@@ -79,12 +82,30 @@ class Entry:
             return self._measure()
         if self._argv[0] == "state":
             return self._state()
+        if self._argv == ["discord"]:
+            return self._discord()
         if self._argv == ["dream"]:
             return Dreamer().run()
         if self._argv[:2] == ["evals", "draft"]:
             return self._draft()
         print(USAGE, file=sys.stderr)
         return 1
+
+    def _discord(self) -> int:
+        """Discord で待つ。トークンが無ければ、書き方を添えて断る。"""
+        try:
+            connection = SettingsFile().discord()
+        except NotSettled as missing:
+            print(missing, file=sys.stderr)
+            return 1
+        return Startup().run(
+            lambda turn, settings: DiscordPlace(
+                turn,
+                settings.dweller,
+                connection.owner_id,
+                DiscordGateway(connection.token),
+            )
+        )
 
     def _state(self) -> int:
         """時点を読み取り、状態を書く。読めない書き方なら使い方を書く。"""

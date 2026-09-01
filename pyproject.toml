@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "続く記憶と気持ちを持ち、話しかけられていない間も動く常駐プログラム"
 requires-python = ">=3.12"
 dependencies = [
+    "discord-py>=2.4,<3",
     "fastembed>=0.8.0,<0.9",
 ]
 
