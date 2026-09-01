@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
-from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Vector
+from yadori.domain.memory import Dweller, Episode, Identity, Retrieval, Shift, Vector
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS dweller (
@@ -46,6 +46,14 @@ CREATE TABLE IF NOT EXISTS retrieval (
     episode_id INTEGER NOT NULL REFERENCES episode(id),
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS shift (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dweller_id TEXT NOT NULL REFERENCES dweller(id),
+    at TEXT NOT NULL,
+    delta REAL NOT NULL,
+    cause TEXT NOT NULL,
+    episode_id INTEGER REFERENCES episode(id)
+);
 """
 
 
@@ -71,6 +79,20 @@ class Row:
         value: object = self._row[column]  # pyright: ignore[reportAny]
         if not isinstance(value, int):
             raise TypeError(f"{column} は数ではない: {value!r}")
+        return value
+
+    def real(self, column: str) -> float:
+        value: object = self._row[column]  # pyright: ignore[reportAny]
+        if not isinstance(value, int | float):
+            raise TypeError(f"{column} が数値でない: {value!r}")
+        return float(value)
+
+    def number_or_none(self, column: str) -> int | None:
+        value: object = self._row[column]  # pyright: ignore[reportAny]
+        if value is None:
+            return None
+        if not isinstance(value, int):
+            raise TypeError(f"{column} が整数でない: {value!r}")
         return value
 
     def text_or_none(self, column: str) -> str | None:
@@ -248,6 +270,27 @@ class SqliteMemories:
         return Retrieval(
             count=row.number("total"),
             last_at=None if last is None else datetime.fromisoformat(last),
+        )
+
+    def record_shift(self, dweller_id: str, shift: Shift) -> None:
+        self._run(
+            "INSERT INTO shift (dweller_id, at, delta, cause, episode_id) VALUES (?, ?, ?, ?, ?)",
+            (dweller_id, shift.at.isoformat(), shift.delta, shift.cause, shift.episode_id),
+        )
+
+    def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
+        rows = self._all(
+            "SELECT at, delta, cause, episode_id FROM shift WHERE dweller_id = ? ORDER BY id",
+            (dweller_id,),
+        )
+        return tuple(
+            Shift(
+                at=datetime.fromisoformat(row.text("at")),
+                delta=row.real("delta"),
+                cause=row.text("cause"),
+                episode_id=row.number_or_none("episode_id"),
+            )
+            for row in rows
         )
 
     def _run(self, sql: str, params: tuple[object, ...]) -> None:

@@ -5,9 +5,18 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
-from yadori.domain.memory import Recollection
+from yadori.domain.memory import Moved, Recollection
+
+
+@dataclass(frozen=True)
+class Spoken:
+    """声が返すもの。応対の文章と、その往復で気持ちがどう動いたか。"""
+
+    reply: str
+    moved: Moved
 
 
 class CannotSpeak(Exception):
@@ -24,4 +33,4 @@ class Voice(Protocol):
     ため使わない。
     """
 
-    def speak(self, recollection: Recollection, utterance: str) -> str: ...
+    def speak(self, recollection: Recollection, utterance: str) -> Spoken: ...

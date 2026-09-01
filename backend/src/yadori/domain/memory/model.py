@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import math
 import zlib
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 Vector = tuple[float, ...]
 
@@ -151,13 +153,74 @@ class HowToRecall:
     relevance_floor: float = 0.85
 
 
+# 気持ちが薄れる半減期。測っていない仮置きで、実際に使って直す（未決事項「気持ちが薄れる速さ」）。
+# 一晩置けば会話の余韻がほぼ消え、休憩を挟んだ程度なら残る、という見当で置いた。
+MOOD_HALF_LIFE = timedelta(hours=6)
+
+
+@dataclass(frozen=True)
+class Moved:
+    """一度のやりとりで気持ちがどちらへどれだけ動いたかと、なぜか。応対を作る側が答える。"""
+
+    delta: float
+    cause: str
+
+    def __post_init__(self) -> None:
+        # 軸の定義は −1〜+1。範囲外を持てると、声の実装ごとに収め忘れた値が記録に残る。
+        if not -1.0 <= self.delta <= 1.0:
+            raise ValueError(f"動きは −1 から +1 の間: {self.delta}")
+
+    @classmethod
+    def unmoved(cls) -> Moved:
+        return cls(delta=0.0, cause="動きなし")
+
+
+@dataclass(frozen=True)
+class Shift:
+    """動き。いつ、どの往復で、どちらへどれだけ、なぜ動いたかの記録。上書きしない（ADR-007）。"""
+
+    at: datetime
+    delta: float
+    cause: str
+    episode_id: int | None
+
+
+@dataclass(frozen=True)
+class Mood:
+    """気持ちの現在値。−1 が沈む、+1 が明るい。動きから求め、保存しない。"""
+
+    value: float
+
+    @classmethod
+    def from_shifts(cls, shifts: Iterable[Shift], now: datetime, half_life: timedelta) -> Mood:
+        """動きのそれぞれを経過時間で薄めた和。−1 と +1 の間に収める。
+
+        薄れ方は半減期の指数で、AIモデルを呼ばず同じ入力から同じ値になる。
+        """
+        total = 0.0
+        for shift in shifts:
+            elapsed = max((now - shift.at).total_seconds(), 0.0)
+            total += shift.delta * math.pow(0.5, elapsed / half_life.total_seconds())
+        return cls(value=max(-1.0, min(1.0, total)))
+
+    @property
+    def described(self) -> str:
+        """人が読む言葉。値の帯で三つに分ける。"""
+        if self.value <= -0.3:
+            return "沈んでいる"
+        if self.value >= 0.3:
+            return "明るい"
+        return "落ち着いている"
+
+
 @dataclass(frozen=True)
 class Recollection:
     """思い出したこと。
 
-    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。
+    直近のやりとりと探した記憶は別の道で来る。混ぜて一つの並びにしない。今の気持ちも添える。
     """
 
     identity: Identity
     recent: tuple[Episode, ...]
     found: tuple[Found, ...]
+    mood: Mood

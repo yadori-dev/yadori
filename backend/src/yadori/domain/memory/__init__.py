@@ -5,15 +5,19 @@
 """
 
 from yadori.domain.memory.model import (
+    MOOD_HALF_LIFE,
     Dweller,
     Episode,
     Found,
     HowToRecall,
     Identity,
+    Mood,
+    Moved,
     Prefixes,
     Provenance,
     Recollection,
     Retrieval,
+    Shift,
     Vector,
 )
 from yadori.domain.memory.ports import (
@@ -24,6 +28,7 @@ from yadori.domain.memory.ports import (
 )
 
 __all__ = [
+    "MOOD_HALF_LIFE",
     "Dweller",
     "Embeddings",
     "EmbeddingsUnavailable",
@@ -32,10 +37,13 @@ __all__ = [
     "HowToRecall",
     "Identity",
     "Memories",
+    "Mood",
+    "Moved",
     "NameNotDeclared",
     "Prefixes",
     "Provenance",
     "Recollection",
     "Retrieval",
+    "Shift",
     "Vector",
 ]
