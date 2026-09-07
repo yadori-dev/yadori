@@ -33,6 +33,7 @@ from yadori.domain.memory.ports import (
     EmbeddingsUnavailable,
     Memories,
     NameNotDeclared,
+    RememberingConflict,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "Prefixes",
     "Provenance",
     "Recollection",
+    "RememberingConflict",
     "Retrieval",
     "Shift",
     "State",

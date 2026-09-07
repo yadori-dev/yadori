@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import final
 
@@ -28,7 +29,7 @@ from tests.sora import (
 )
 from yadori.adapter.embedding.characters import CharacterPairs
 from yadori.adapter.store import InMemoryMemories, SqliteMemories
-from yadori.domain.memory import Episode, Memories, NameNotDeclared, Provenance, Vector
+from yadori.domain.memory import Episode, Memories, Moved, NameNotDeclared, Provenance, Vector
 from yadori.usecase.conversation import Conversation
 
 
@@ -46,6 +47,10 @@ class _FailingWrite:
         del args, kwargs
         raise OSError("保存先を読み書きできない")
 
+    def keep_episode(self, *args: object, **kwargs: object) -> Episode:
+        del args, kwargs
+        raise OSError("保存先を読み書きできない")
+
 
 @final
 class _FailingIndex:
@@ -60,6 +65,33 @@ class _FailingIndex:
     def write_index(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
         raise OSError("インデックスを書けない")
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        episode = self._inner.keep_episode(
+            dweller_id,
+            utterance,
+            reply,
+            identity_version,
+            happened_at,
+            recalled_at,
+            source,
+            (),
+            moved,
+        )
+        for model, vector in indexes:
+            self.write_index(episode.id, model, vector)
+        return episode
 
 
 @final

@@ -19,6 +19,8 @@ from yadori.domain.memory import (
     Episode,
     Gist,
     Identity,
+    Moved,
+    RememberingConflict,
     Retrieval,
     Shift,
     Vector,
@@ -43,7 +45,9 @@ CREATE TABLE IF NOT EXISTS episode (
     utterance TEXT NOT NULL,
     reply TEXT NOT NULL,
     identity_version INTEGER NOT NULL,
-    happened_at TEXT NOT NULL
+    happened_at TEXT NOT NULL,
+    recalled_at TEXT,
+    source TEXT
 );
 CREATE TABLE IF NOT EXISTS episode_index (
     episode_id INTEGER NOT NULL REFERENCES episode(id),
@@ -145,8 +149,37 @@ class SqliteMemories:
         )
         self._connection.row_factory = sqlite3.Row
         _ = self._connection.execute("PRAGMA foreign_keys = ON")
-        self._discard_old_index_table()
-        _ = self._connection.executescript(_SCHEMA)
+        self._prepare_schema()
+
+    def _prepare_schema(self) -> None:
+        """新旧どちらの保存先も、形を途中まで変えずに使用可能な形へする。"""
+        _ = self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._discard_old_index_table()
+            for statement in _SCHEMA.split(";"):
+                if statement.strip():
+                    _ = self._connection.execute(statement)
+            self._upgrade_exact_sources()
+        except BaseException:
+            _ = self._connection.execute("ROLLBACK")
+            raise
+        _ = self._connection.execute("COMMIT")
+
+    def _upgrade_exact_sources(self) -> None:
+        """以前の原文を変えず、出典と思い出した時刻と一往復一動きの制約を足す。"""
+        columns = {column.text("name") for column in self._all("PRAGMA table_info(episode)", ())}
+        if "recalled_at" not in columns:
+            _ = self._connection.execute("ALTER TABLE episode ADD COLUMN recalled_at TEXT")
+        if "source" not in columns:
+            _ = self._connection.execute("ALTER TABLE episode ADD COLUMN source TEXT")
+        _ = self._connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS episode_source"
+            + " ON episode (dweller_id, source) WHERE source IS NOT NULL"
+        )
+        _ = self._connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS shift_episode"
+            + " ON shift (dweller_id, episode_id) WHERE episode_id IS NOT NULL"
+        )
 
     def _discard_old_index_table(self) -> None:
         """以前の版が作ったインデックスの表は、形が違えば捨てる。原文の表には触れない。
@@ -248,26 +281,112 @@ class SqliteMemories:
         reply: str,
         identity_version: int,
         happened_at: datetime,
+        recalled_at: datetime | None = None,
+        source: str | None = None,
     ) -> Episode:
         cursor = self._connection.execute(
-            "INSERT INTO episode (dweller_id, utterance, reply, identity_version, happened_at)"
-            + " VALUES (?, ?, ?, ?, ?)",
-            (dweller_id, utterance, reply, identity_version, happened_at.isoformat()),
+            "INSERT INTO episode"
+            + " (dweller_id, utterance, reply, identity_version, happened_at, recalled_at, source)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING *",
+            (
+                dweller_id,
+                utterance,
+                reply,
+                identity_version,
+                happened_at.isoformat(),
+                None if recalled_at is None else recalled_at.isoformat(),
+                source,
+            ),
         )
-        return Episode(
-            id=int(cursor.lastrowid or 0),
-            utterance=utterance,
-            reply=reply,
-            identity_version=identity_version,
-            happened_at=happened_at,
+        inserted: sqlite3.Row | None = cursor.fetchone()  # pyright: ignore[reportAny]
+        if inserted is not None:
+            return self._as_episode(Row(inserted))
+        if source is None:
+            raise RuntimeError("出典の無い一往復を書けなかった")
+        row = self._one(
+            "SELECT * FROM episode WHERE dweller_id = ? AND source = ?", (dweller_id, source)
         )
+        if row is None:
+            raise RuntimeError(f"出典 {source} の一往復を書けなかった")
+        kept = self._as_episode(row)
+        if (
+            kept.utterance != utterance
+            or kept.reply != reply
+            or kept.identity_version != identity_version
+            or kept.recalled_at != recalled_at
+        ):
+            raise RememberingConflict(f"同じ出典へ異なる一往復が届いた: {source}")
+        return kept
 
     def episode(self, episode_id: int) -> Episode | None:
         row = self._one(
-            "SELECT id, utterance, reply, identity_version, happened_at FROM episode WHERE id = ?",
+            "SELECT * FROM episode WHERE id = ?",
             (episode_id,),
         )
         return None if row is None else self._as_episode(row)
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        """一往復と気持ちを同じ取引で確定し、索引は後から補える。"""
+        _ = self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self._episode_from_source(dweller_id, source)
+            episode = self.write_episode(
+                dweller_id,
+                utterance,
+                reply,
+                identity_version,
+                happened_at,
+                recalled_at,
+                source,
+            )
+            if existing is not None:
+                self._require_same_moved(dweller_id, episode.id, moved)
+            elif moved is not None:
+                self.record_shift(
+                    dweller_id,
+                    Shift(happened_at, moved.delta, moved.cause, episode.id),
+                )
+        except BaseException:
+            _ = self._connection.execute("ROLLBACK")
+            raise
+        _ = self._connection.execute("COMMIT")
+        for model, vector in indexes:
+            self.write_index(episode.id, model, vector)
+        return episode
+
+    def _episode_from_source(self, dweller_id: str, source: str | None) -> Episode | None:
+        if source is None:
+            return None
+        row = self._one(
+            "SELECT * FROM episode WHERE dweller_id = ? AND source = ?", (dweller_id, source)
+        )
+        return None if row is None else self._as_episode(row)
+
+    def _require_same_moved(self, dweller_id: str, episode_id: int, moved: Moved | None) -> None:
+        row = self._one(
+            "SELECT delta, cause FROM shift WHERE dweller_id = ? AND episode_id = ?",
+            (dweller_id, episode_id),
+        )
+        if row is None and moved is None:
+            return
+        if (
+            row is None
+            or moved is None
+            or row.real("delta") != moved.delta
+            or row.text("cause") != moved.cause
+        ):
+            raise RememberingConflict(f"同じ一往復へ異なる気持ちの動きが届いた: {episode_id}")
 
     def count_episodes(self, dweller_id: str) -> int:
         row = self._one("SELECT COUNT(*) AS total FROM episode WHERE dweller_id = ?", (dweller_id,))
@@ -316,10 +435,22 @@ class SqliteMemories:
         )
 
     def record_shift(self, dweller_id: str, shift: Shift) -> None:
-        self._run(
-            "INSERT INTO shift (dweller_id, at, delta, cause, episode_id) VALUES (?, ?, ?, ?, ?)",
+        cursor = self._connection.execute(
+            "INSERT INTO shift (dweller_id, at, delta, cause, episode_id) VALUES (?, ?, ?, ?, ?)"
+            + " ON CONFLICT DO NOTHING RETURNING id",
             (dweller_id, shift.at.isoformat(), shift.delta, shift.cause, shift.episode_id),
         )
+        inserted: sqlite3.Row | None = cursor.fetchone()  # pyright: ignore[reportAny]
+        if inserted is not None or shift.episode_id is None:
+            return
+        row = self._one(
+            "SELECT delta, cause FROM shift WHERE dweller_id = ? AND episode_id = ?",
+            (dweller_id, shift.episode_id),
+        )
+        if row is None:
+            raise RuntimeError(f"一往復 {shift.episode_id} の動きを書けなかった")
+        if row.real("delta") != shift.delta or row.text("cause") != shift.cause:
+            raise RememberingConflict(f"同じ一往復へ異なる気持ちの動きが届いた: {shift.episode_id}")
 
     def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
         rows = self._all(
@@ -338,7 +469,7 @@ class SqliteMemories:
 
     def episodes_after(self, dweller_id: str, at: datetime | None) -> tuple[Episode, ...]:
         rows = self._all(
-            "SELECT id, utterance, reply, identity_version, happened_at FROM episode"
+            "SELECT * FROM episode"
             + " WHERE dweller_id = ? AND happened_at > ? ORDER BY happened_at, id",
             (dweller_id, "" if at is None else at.isoformat()),
         )
@@ -437,12 +568,15 @@ class SqliteMemories:
         return Identity(version=row.number("version"), text=row.text("text"))
 
     def _as_episode(self, row: Row) -> Episode:
+        recalled = row.text_or_none("recalled_at")
         return Episode(
             id=row.number("id"),
             utterance=row.text("utterance"),
             reply=row.text("reply"),
             identity_version=row.number("identity_version"),
             happened_at=datetime.fromisoformat(row.text("happened_at")),
+            recalled_at=None if recalled is None else datetime.fromisoformat(recalled),
+            source=row.text_or_none("source"),
         )
 
     def _as_text(self, vector: Vector) -> str:
