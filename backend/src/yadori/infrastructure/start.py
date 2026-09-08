@@ -97,8 +97,12 @@ class Startup:
         保存し、初回の取得が黙って進まないよう前触れは画面へ出す。
         応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
-        conversation = Conversation(memories, self.embeddings(settings), self._now)
+        conversation = self.conversation(memories, settings)
         return Turn(conversation, ClaudeCodeVoice(ClaudeCodeCall(settings.model, WAIT_SECONDS)))
+
+    def conversation(self, memories: SqliteMemories, settings: Settings) -> Conversation:
+        """外の対話する道具へ、同じ思い出す口と覚える口を渡す。"""
+        return Conversation(memories, self.embeddings(settings), self._now)
 
     def embeddings(self, settings: Settings) -> Embeddings:
         """宿りが使う埋め込み。既定の工場が組む。"""

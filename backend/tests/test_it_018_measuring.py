@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import final
 
@@ -13,7 +14,7 @@ import pytest
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.store import InMemoryMemories, SqliteMemories
 from yadori.domain.evaluation import CannotMeasure, Case, Exchange, RecallEval
-from yadori.domain.memory import Dweller, HowToRecall, Memories, Vector
+from yadori.domain.memory import Dweller, Episode, HowToRecall, Memories, Moved, Vector
 from yadori.usecase.evaluation import Comparing, Measuring
 
 EXCHANGES = (
@@ -52,6 +53,31 @@ class _WithoutIndex:
 
     def write_index(self, episode_id: int, model: str, vector: Vector) -> None:
         del episode_id, model, vector
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        del indexes
+        return self._inner.keep_episode(
+            dweller_id,
+            utterance,
+            reply,
+            identity_version,
+            happened_at,
+            recalled_at,
+            source,
+            (),
+            moved,
+        )
 
 
 class TestMeasuring:

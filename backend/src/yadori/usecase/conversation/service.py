@@ -24,7 +24,7 @@ from yadori.domain.memory import (
     Moved,
     NameNotDeclared,
     Recollection,
-    Shift,
+    RememberingConflict,
     State,
     Vector,
 )
@@ -61,32 +61,54 @@ class Conversation:
         - 最新の夢を添える
         - 思い出したことを記録する
         """
+        recalled_at = self._now()
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
         found = self._found_beyond(dweller_id, utterance, recent)
-        state = self.state(dweller_id)
+        state = self.state(dweller_id, recalled_at)
         dream = self._dreamed(dweller_id)
-        self._record_retrieval(found)
-        return Recollection(identity=identity, recent=recent, found=found, state=state, dream=dream)
+        self._record_retrieval(found, recalled_at)
+        return Recollection(
+            identity=identity,
+            recent=recent,
+            found=found,
+            state=state,
+            dream=dream,
+            recalled_at=recalled_at,
+        )
 
     def remember(
-        self, dweller_id: str, utterance: str, reply: str, moved: Moved | None = None
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        moved: Moved | None = None,
+        *,
+        recalled_at: datetime | None = None,
+        source: str | None = None,
+        identity_version: int | None = None,
     ) -> Episode:
         """一度のやりとりを、原文のまま記憶へ加え、気持ちを動かす。
 
         - 名乗りを確かめる（無ければ原文を書く前に断る）
         - 数の並びを先に作る（埋め込みを使えなければここで断る）
-        - 原文を確定する
-        - インデックスを書く
-        - 動きを積む（渡されたときだけ。測る手順と下書きの手順は渡さない）
+        - 原文と動きをひとまとまりで確定する
+        - 後から作り直せるインデックスを書く
         """
-        identity = self._declared_identity(dweller_id)
+        identity = self._identity_used(dweller_id, identity_version)
         made = self._made(utterance)
-        episode = self._keep_episode(dweller_id, utterance, reply, identity)
-        self._write_index(episode, made)
-        if moved is not None:
-            self._shift(dweller_id, episode, moved)
-        return episode
+        happened_at = self._now()
+        return self._memories.keep_episode(
+            dweller_id,
+            utterance,
+            reply,
+            identity.version,
+            happened_at,
+            recalled_at,
+            source,
+            made,
+            moved,
+        )
 
     def _dreamed(self, dweller_id: str) -> Dreamed | None:
         """最新の夢と、その夢で残した要点。夢が無ければ無し。"""
@@ -95,9 +117,9 @@ class Conversation:
             return None
         return Dreamed(dream=dream, gists=self._memories.gists_of_dream(dream.id))
 
-    def state(self, dweller_id: str) -> State:
+    def state(self, dweller_id: str, at: datetime | None = None) -> State:
         """今の状態。気持ちと性格を、積まれた動きと経過時間から求め、保存しない（ADR-007）。"""
-        return State.from_shifts(self._memories.shifts(dweller_id), self._now())
+        return State.from_shifts(self._memories.shifts(dweller_id), at or self._now())
 
     def rebuild_index(self, dweller_id: str) -> int:
         """インデックスを原文から作り直す。
@@ -121,6 +143,15 @@ class Conversation:
         identity = self._memories.current_identity(dweller_id)
         if identity is None:
             raise NameNotDeclared(dweller_id)
+        return identity
+
+    def _identity_used(self, dweller_id: str, version: int | None) -> Identity:
+        """返事を作った時点の名乗りを取る。途中で名乗りが変わっても現在値へ置き換えない。"""
+        if version is None:
+            return self._declared_identity(dweller_id)
+        identity = self._memories.identity_at(dweller_id, version)
+        if identity is None:
+            raise RememberingConflict(f"返事を作った名乗りの版が見つからない: {version}")
         return identity
 
     def _recent(self, dweller_id: str) -> tuple[Episode, ...]:
@@ -184,19 +215,11 @@ class Conversation:
             way=way,
         )
 
-    def _record_retrieval(self, found: Collection[Found]) -> None:
+    def _record_retrieval(self, found: Collection[Found], at: datetime) -> None:
         """思い出したことを記録する。思い出しやすさはここから求める。"""
-        self._memories.record_retrieval([one.episode.id for one in found], self._now())
+        self._memories.record_retrieval([one.episode.id for one in found], at)
 
     # 覚える
-
-    def _keep_episode(
-        self, dweller_id: str, utterance: str, reply: str, identity: Identity
-    ) -> Episode:
-        """原文をそのまま確定する。どの名乗りで作られた応対かも一緒に残す。"""
-        return self._memories.write_episode(
-            dweller_id, utterance, reply, identity.version, self._now()
-        )
 
     def _made(self, utterance: str) -> tuple[tuple[str, Vector], ...]:
         """道ごとに数の並びを作る。
@@ -204,18 +227,3 @@ class Conversation:
         原文を書く前に呼ぶ。埋め込みを使えないときは、ここで断って何も書かない。
         """
         return tuple((way.name, way.to_remember(utterance)) for way in self._ways)
-
-    def _shift(self, dweller_id: str, episode: Episode, moved: Moved) -> None:
-        """その往復で動いたぶんを、上書きせずに積む。"""
-        self._memories.record_shift(
-            dweller_id,
-            Shift(at=self._now(), delta=moved.delta, cause=moved.cause, episode_id=episode.id),
-        )
-
-    def _write_index(self, episode: Episode, made: tuple[tuple[str, Vector], ...]) -> None:
-        """作っておいた数の並びをインデックスとして書く。
-
-        原文を確定した後に呼ぶ。ここで失敗しても原文は残り、後から作り直せる。
-        """
-        for name, vector in made:
-            self._memories.write_index(episode.id, name, vector)

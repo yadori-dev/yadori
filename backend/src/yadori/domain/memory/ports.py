@@ -15,6 +15,7 @@ from yadori.domain.memory.model import (
     Episode,
     Gist,
     Identity,
+    Moved,
     Provenance,
     Retrieval,
     Shift,
@@ -41,6 +42,10 @@ class EmbeddingsUnavailable(Exception):
     """
 
 
+class RememberingConflict(Exception):
+    """同じ出典へ、以前と異なる一往復または気持ちの動きが届いた。"""
+
+
 class Memories(Protocol):
     """宿りの記憶の保存先。
 
@@ -52,6 +57,8 @@ class Memories(Protocol):
     def dweller(self, dweller_id: str) -> Dweller | None: ...
 
     def current_identity(self, dweller_id: str) -> Identity | None: ...
+
+    def identity_at(self, dweller_id: str, version: int) -> Identity | None: ...
 
     def write_identity(self, dweller_id: str, text: str) -> Identity: ...
 
@@ -74,7 +81,24 @@ class Memories(Protocol):
         reply: str,
         identity_version: int,
         happened_at: datetime,
+        recalled_at: datetime | None = None,
+        source: str | None = None,
     ) -> Episode: ...
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        """一往復と気持ちを一件で残し、作れる索引を添える。"""
+        ...
 
     def count_episodes(self, dweller_id: str) -> int: ...
 

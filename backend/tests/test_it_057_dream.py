@@ -320,7 +320,7 @@ class TestIT057004:
     def test_IT_057_004_夢が無ければ添わない(self) -> None:
         call = _Answering("はい。")
         recollection = Recollection(
-            Identity(1, "x"), (), (), State(Mood(0.0), Character(0.0)), None
+            Identity(1, "x"), (), (), State(Mood(0.0), Character(0.0)), None, AT
         )
 
         _ = ClaudeCodeVoice(call).speak(recollection, "や")

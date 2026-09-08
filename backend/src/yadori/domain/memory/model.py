@@ -103,6 +103,8 @@ class Episode:
     reply: str
     identity_version: int
     happened_at: datetime
+    recalled_at: datetime | None = None
+    source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -317,3 +319,4 @@ class Recollection:
     found: tuple[Found, ...]
     state: State
     dream: Dreamed | None
+    recalled_at: datetime

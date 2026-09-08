@@ -6,13 +6,25 @@ SQLite と同じ振る舞いを別の作りで持つ。プロセスが終わる�
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
-from yadori.domain.memory import Dream, Dweller, Episode, Gist, Identity, Retrieval, Shift, Vector
+from yadori.domain.memory import (
+    Dream,
+    Dweller,
+    Episode,
+    Gist,
+    Identity,
+    Moved,
+    RememberingConflict,
+    Retrieval,
+    Shift,
+    Vector,
+)
 
 
 @dataclass
@@ -89,13 +101,28 @@ class InMemoryMemories:
         reply: str,
         identity_version: int,
         happened_at: datetime,
+        recalled_at: datetime | None = None,
+        source: str | None = None,
     ) -> Episode:
+        if source is not None:
+            for owner, kept in self._kept.episodes.values():
+                if owner == dweller_id and kept.source == source:
+                    if (
+                        kept.utterance != utterance
+                        or kept.reply != reply
+                        or kept.identity_version != identity_version
+                        or kept.recalled_at != recalled_at
+                    ):
+                        raise RememberingConflict(f"同じ出典へ異なる一往復が届いた: {source}")
+                    return kept
         episode = Episode(
             id=self._kept.next_id,
             utterance=utterance,
             reply=reply,
             identity_version=identity_version,
             happened_at=happened_at,
+            recalled_at=recalled_at,
+            source=source,
         )
         self._kept.episodes[episode.id] = (dweller_id, episode)
         self._kept.next_id += 1
@@ -103,6 +130,66 @@ class InMemoryMemories:
 
     def count_episodes(self, dweller_id: str) -> int:
         return len(self._owned(dweller_id))
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        before = copy.deepcopy(self._kept)
+        try:
+            existing = self._episode_from_source(dweller_id, source)
+            episode = self.write_episode(
+                dweller_id,
+                utterance,
+                reply,
+                identity_version,
+                happened_at,
+                recalled_at,
+                source,
+            )
+            if existing is not None:
+                self._require_same_moved(dweller_id, episode.id, moved)
+            elif moved is not None:
+                self.record_shift(
+                    dweller_id,
+                    Shift(happened_at, moved.delta, moved.cause, episode.id),
+                )
+        except BaseException:
+            self._kept = before
+            raise
+        for model, vector in indexes:
+            self.write_index(episode.id, model, vector)
+        return episode
+
+    def _episode_from_source(self, dweller_id: str, source: str | None) -> Episode | None:
+        if source is None:
+            return None
+        for owner, episode in self._kept.episodes.values():
+            if owner == dweller_id and episode.source == source:
+                return episode
+        return None
+
+    def _require_same_moved(self, dweller_id: str, episode_id: int, moved: Moved | None) -> None:
+        kept = next(
+            (
+                shift
+                for owner, shift in self._kept.shifts
+                if owner == dweller_id and shift.episode_id == episode_id
+            ),
+            None,
+        )
+        if kept is None and moved is None:
+            return
+        if kept is None or moved is None or kept.delta != moved.delta or kept.cause != moved.cause:
+            raise RememberingConflict(f"同じ一往復へ異なる気持ちの動きが届いた: {episode_id}")
 
     def write_index(self, episode_id: int, model: str, vector: Vector) -> None:
         self._kept.index[(episode_id, model)] = vector
@@ -128,6 +215,14 @@ class InMemoryMemories:
         return Retrieval(count=len(times), last_at=max(times) if times else None)
 
     def record_shift(self, dweller_id: str, shift: Shift) -> None:
+        if shift.episode_id is not None:
+            for owner, kept in self._kept.shifts:
+                if owner == dweller_id and kept.episode_id == shift.episode_id:
+                    if kept.delta != shift.delta or kept.cause != shift.cause:
+                        raise RememberingConflict(
+                            f"同じ一往復へ異なる気持ちの動きが届いた: {shift.episode_id}"
+                        )
+                    return
         self._kept.shifts.append((dweller_id, shift))
 
     def shifts(self, dweller_id: str) -> tuple[Shift, ...]:

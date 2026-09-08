@@ -50,7 +50,7 @@ class Turn:
         """
         recollection = self._recall(dweller_id, utterance)
         spoken = self._speak(recollection, utterance)
-        episode = self._remember(dweller_id, utterance, spoken)
+        episode = self._remember(dweller_id, utterance, spoken, recollection)
         return Response(
             reply=spoken.reply,
             recollection=recollection,
@@ -75,6 +75,15 @@ class Turn:
         """思い出したことと名乗りから、応対の文章を作る。"""
         return self._voice.speak(recollection, utterance)
 
-    def _remember(self, dweller_id: str, utterance: str, spoken: Spoken) -> Episode:
+    def _remember(
+        self, dweller_id: str, utterance: str, spoken: Spoken, recollection: Recollection
+    ) -> Episode:
         """交わした一往復を原文のまま記憶へ加え、その往復の動きを積む。"""
-        return self._conversation.remember(dweller_id, utterance, spoken.reply, spoken.moved)
+        return self._conversation.remember(
+            dweller_id,
+            utterance,
+            spoken.reply,
+            spoken.moved,
+            recalled_at=recollection.recalled_at,
+            identity_version=recollection.identity.version,
+        )

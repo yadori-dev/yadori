@@ -122,7 +122,12 @@ class TestST056001:
     def test_ST_056_001_声の前置きに性格の値と言葉が入る(self) -> None:
         call = _Answering("はい。")
         recollection = Recollection(
-            Identity(1, "わたしはそらです。"), (), (), State(Mood(0.0), Character(0.05)), None
+            Identity(1, "わたしはそらです。"),
+            (),
+            (),
+            State(Mood(0.0), Character(0.05)),
+            None,
+            AT,
         )
 
         _ = ClaudeCodeVoice(call).speak(recollection, "おはよう")

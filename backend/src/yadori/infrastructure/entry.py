@@ -13,6 +13,7 @@ from typing import final
 from yadori.adapter.embedding import Choosing, NotAnEmbeddingName, Weighing
 from yadori.adapter.place import DiscordGateway, DiscordPlace
 from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall
+from yadori.infrastructure.claude import ClaudeCompanion, ClaudeHook
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.dream import Dreamer
 from yadori.infrastructure.measure import Measure
@@ -22,6 +23,7 @@ from yadori.infrastructure.state import StateReport
 
 USAGE = (
     "使い方:\n"
+    + "  yadori claude                      宿りとして Claude Code を起こす\n"
     + "  python -m yadori                    宿りを起こして話す\n"
     + "  python -m yadori discord            Discord で話しかけられるのを待つ。トークンは\n"
     + "                                      YADORI_HOME の discord.toml に置く\n"
@@ -78,6 +80,10 @@ class Entry:
         """
         if not self._argv:
             return Startup().run()
+        if self._argv == ["claude"]:
+            return ClaudeCompanion().run()
+        if len(self._argv) == 3 and self._argv[0] == "_claude-hook":
+            return ClaudeHook(self._argv[1], Path(self._argv[2])).run()
         if self._argv[0] == "measure":
             return self._measure()
         if self._argv[0] == "state":
@@ -90,6 +96,11 @@ class Entry:
             return self._draft()
         print(USAGE, file=sys.stderr)
         return 1
+
+    @staticmethod
+    def console() -> int:
+        """`yadori` 命令から呼ばれる入口。"""
+        return Entry(sys.argv).run()
 
     def _discord(self) -> int:
         """Discord で待つ。トークンが無ければ、書き方を添えて断る。"""
