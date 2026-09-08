@@ -25,7 +25,10 @@ class CodexWords(CompanionWords):
     def _json(self, context: str) -> str:
         return json.dumps(
             {
-                "additionalContext": context,
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": context,
+                }
             },
             ensure_ascii=False,
             separators=(",", ":"),
@@ -34,6 +37,18 @@ class CodexWords(CompanionWords):
     def compact_response(self, recollection: Recollection, limit: int = 9000) -> str:
         """会話圧縮（compact）後に名乗りと状態を戻すフック応答。"""
         context = self.identity_and_state(recollection)
-        if self._size(context) > limit:
+        if len(self._compact_json(context).encode("utf-8")) > limit:
             raise CannotSpeak("宿りの名乗りと状態だけで Codex のフック上限を超えた")
-        return self._json(context)
+        return self._compact_json(context)
+
+    def _compact_json(self, context: str) -> str:
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": context,
+                }
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )

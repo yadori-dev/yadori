@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -106,7 +107,7 @@ class CodexSession:
             self._write_hooks(run_dir)
             credential = self._link_credential(run_dir)
             environment = self._child_environment(run_dir)
-            argv = (self._executable,)
+            argv = (self._executable, "--dangerously-bypass-hook-trust")
             return PreparedCodex(run_dir, argv, environment, lock, credential)
         except BaseException:
             lock.close()
@@ -265,10 +266,17 @@ class CodexSession:
         return env
 
     def _write_hooks(self, run_dir: Path) -> None:
-        yadori_bin = sys.argv[0]
-        if not Path(yadori_bin).is_absolute():
-            resolved = shutil.which(yadori_bin)
-            yadori_bin = resolved if resolved else sys.executable + " -m yadori"
+        entry = Path(sys.executable).with_name("yadori").resolve()
+        if entry.is_file():
+            base_cmd = [str(entry)]
+        else:
+            resolved = shutil.which("yadori")
+            base_cmd = [resolved] if resolved else [sys.executable, "-m", "yadori"]
+
+        def _hook_cmd(subcommand: str) -> str:
+            parts = [*base_cmd, "_codex-hook", subcommand, str(run_dir)]
+            return " ".join(shlex.quote(part) for part in parts)
+
         hooks_def: dict[str, object] = {
             "description": "yadori codex companion hooks",
             "hooks": {
@@ -277,7 +285,7 @@ class CodexSession:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": f"{yadori_bin} _codex-hook user-prompt-submit {run_dir}",
+                                "command": _hook_cmd("user-prompt-submit"),
                                 "timeout": 10,
                                 "additionalContextLimit": 0,
                             }
@@ -289,7 +297,7 @@ class CodexSession:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": f"{yadori_bin} _codex-hook stop {run_dir}",
+                                "command": _hook_cmd("stop"),
                                 "timeout": 10,
                             }
                         ]
@@ -300,7 +308,7 @@ class CodexSession:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": f"{yadori_bin} _codex-hook interrupt {run_dir}",
+                                "command": _hook_cmd("interrupt"),
                                 "timeout": 10,
                             }
                         ]
@@ -311,7 +319,7 @@ class CodexSession:
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": f"{yadori_bin} _codex-hook session-start {run_dir}",
+                                "command": _hook_cmd("session-start"),
                                 "timeout": 10,
                                 "additionalContextLimit": 0,
                             }

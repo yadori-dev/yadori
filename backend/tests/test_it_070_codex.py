@@ -359,8 +359,9 @@ class TestIT070002:
         )
         out = capsys.readouterr().out.strip()
         parsed = _mapping(json.loads(out))  # pyright: ignore[reportAny]
-        assert "additionalContext" in parsed
-        assert "わたしはそらです" in str(parsed["additionalContext"])
+        inner = _mapping(parsed["hookSpecificOutput"])
+        assert "additionalContext" in inner
+        assert "わたしはそらです" in str(inner["additionalContext"])
 
     def test_IT_070_002_古い未施錠セッションだけを片付ける(self, tmp_path: Path) -> None:
         sessions = tmp_path / "sessions"
@@ -444,8 +445,9 @@ class TestIT070004:
         response_json = words.hook_response(recollection, limit=9000)
         assert len(response_json.encode("utf-8")) <= 9000
         parsed = _mapping(json.loads(response_json))  # pyright: ignore[reportAny]
-        assert "additionalContext" in parsed
-        assert "省略" in str(parsed["additionalContext"])
+        inner = _mapping(parsed["hookSpecificOutput"])
+        assert "additionalContext" in inner
+        assert "省略" in str(inner["additionalContext"])
 
     def test_IT_070_004_返事末尾の気持ちの印を本文と分離する(self) -> None:
         words = CodexWords()

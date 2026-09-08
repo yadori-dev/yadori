@@ -168,7 +168,8 @@ class TestST070002:
             code, out, _ = _call_hook("user-prompt-submit", req_prompt, run_dir, home, monkeypatch)
             assert code == 0
             res = _mapping(json.loads(out))  # pyright: ignore[reportAny]
-            assert "additionalContext" in res
+            inner = _mapping(res["hookSpecificOutput"])
+            assert "additionalContext" in inner
 
             # 2. Codex の返事が終わる
             req_stop = {
@@ -381,7 +382,8 @@ class TestST070006:
         resp_json = words.hook_response(recollection, limit=9000)
         assert len(resp_json.encode("utf-8")) <= 9000
         parsed = _mapping(json.loads(resp_json))  # pyright: ignore[reportAny]
-        assert "additionalContext" in parsed
+        inner = _mapping(parsed["hookSpecificOutput"])
+        assert "additionalContext" in inner
 
         # 2. SessionStart (compact) で名乗りと状態が戻るか
         req_compact = {
@@ -391,6 +393,7 @@ class TestST070006:
         code, out, _ = _call_hook("session-start", req_compact, run_dir, home, monkeypatch)
         assert code == 0
         compact_res = _mapping(json.loads(out))  # pyright: ignore[reportAny]
-        assert "additionalContext" in compact_res
-        compact_text = str(compact_res["additionalContext"])
+        compact_inner = _mapping(compact_res["hookSpecificOutput"])
+        assert "additionalContext" in compact_inner
+        compact_text = str(compact_inner["additionalContext"])
         assert "そら" in compact_text
