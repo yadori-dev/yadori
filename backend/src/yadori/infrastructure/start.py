@@ -15,10 +15,10 @@ from typing import final
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.place import CannotConnect, Place, Terminal
 from yadori.adapter.store import SqliteMemories
-from yadori.adapter.tool import ClaudeCodeCall
 from yadori.adapter.voice import WAIT_SECONDS, ClaudeCodeVoice
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
+from yadori.infrastructure.tools import SelectedCall
 from yadori.usecase.conversation import Conversation, Turn
 
 Factory = Callable[[Path | None, Announcing | None], Embeddings]
@@ -55,7 +55,7 @@ class Startup:
             turn = self._assemble(memories, settings)
             self._catch_up(turn, settings)
             self._where(where)(turn, settings).listen()
-        except (EmbeddingsUnavailable, CannotConnect) as missing:
+        except (NotSettled, EmbeddingsUnavailable, CannotConnect) as missing:
             return self._refuse(missing)
         finally:
             memories.close()
@@ -98,7 +98,10 @@ class Startup:
         応対の文章は、持ち主の定額契約で動く対話する道具が作る。
         """
         conversation = self.conversation(memories, settings)
-        return Turn(conversation, ClaudeCodeVoice(ClaudeCodeCall(settings.model, WAIT_SECONDS)))
+        return Turn(
+            conversation,
+            ClaudeCodeVoice(SelectedCall("応対（chat / Discord）", WAIT_SECONDS, settings.home)),
+        )
 
     def conversation(self, memories: SqliteMemories, settings: Settings) -> Conversation:
         """外の対話する道具へ、同じ思い出す口と覚える口を渡す。"""

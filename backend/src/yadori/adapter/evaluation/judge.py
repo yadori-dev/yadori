@@ -47,7 +47,10 @@ class ClaudeCodeJudge:
     def name(self) -> str:
         # 呼び方の部品が実際に使う名前をそのまま返す。別に受けると下書きに残る名前と
         # 実際に判定した AIモデルがずれ得る。
-        return self._call.model
+        try:
+            return self._call.model
+        except ToolCallFailed as trouble:
+            raise CannotDraft(str(trouble)) from trouble
 
     def pairs(self, askings: Sequence[Asking]) -> tuple[Pair, ...]:
         """問いをいくつか渡し、問いごとに同じ話題と判定された候補の番号を組で受け取る。"""

@@ -35,7 +35,9 @@ class AgySession:
         home: Path,
         cwd: Path | None = None,
         environment: Mapping[str, str] | None = None,
+        internal: bool = False,
     ) -> None:
+        self._internal = internal
         self._home = home.resolve()
         self._cwd = (cwd or Path.cwd()).resolve()
         self._environment = dict(os.environ if environment is None else environment)
@@ -135,9 +137,13 @@ class AgySession:
         if any(self._environment.get(key) for key in denied):
             raise ValueError("agy の認証・接続先を変更する環境変数があるため起動しません")
         trusted = settings.get("trustedWorkspaces", [])
-        if not isinstance(trusted, list) or not any(
-            isinstance(path, str) and self._cwd.is_relative_to(Path(path).expanduser().resolve())
-            for path in trusted  # pyright: ignore[reportUnknownVariableType]
+        if not self._internal and (
+            not isinstance(trusted, list)
+            or not any(
+                isinstance(path, str)
+                and self._cwd.is_relative_to(Path(path).expanduser().resolve())
+                for path in trusted  # pyright: ignore[reportUnknownVariableType]
+            )
         ):
             raise ValueError("先に普段の agy でこの作業場所を開き、信頼を確認してください")
         keys = ("colorScheme", "altScreenMode", "verbosity", "runningLightSpeed", "enableTelemetry")
@@ -206,7 +212,15 @@ class AgySession:
             "あなたの名乗りと記憶は、発話前に渡される宿りの文脈に従います。"
             "下位担当、予約、背景作業、別の会話への切替は使いません。\n"
         )
+        if self._internal:
+            agent = (
+                "---\nname: yadori\ndescription: 渡された文章だけから結果を返す\n"
+                "mainAgent: true\nsubagent: false\nexcludeDefaultComponents: true\n"
+                "tools: []\n---\n渡された指示に従い文章だけを返してください。"
+            )
         _ = (config / "agents/yadori/agent.md").write_text(agent, encoding="utf-8")
+        if self._internal:
+            return
         hooks: dict[str, object] = {}
         for event, name in (("PreInvocation", "pre"), ("Stop", "stop"), ("PreToolUse", "tool")):
             command = shlex.join(
