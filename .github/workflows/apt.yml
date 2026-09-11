@@ -40,6 +40,7 @@ jobs:
           retention-days: 7
 
   verify:
+    timeout-minutes: 15
     needs: build
     runs-on: ubuntu-24.04
     steps:
@@ -51,6 +52,8 @@ jobs:
           path: packages
       - run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
       - name: 署名・導入・更新・削除を確かめる
+        env:
+          APT_TEST_NETWORK: host
         run: bash packaging/apt/test.sh packages
 
   publish:

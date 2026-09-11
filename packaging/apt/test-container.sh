@@ -2,13 +2,14 @@
 set -euo pipefail
 . /etc/os-release
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
+printf 'Acquire::Retries "2"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";\n' > /etc/apt/apt.conf.d/99-yadori-test-network
+apt-get update -o APT::Update::Error-Mode=any
 apt-get install -y -qq ca-certificates
 mkdir -p /etc/apt/keyrings
 cp /test/old/yadori.asc /etc/apt/keyrings/yadori.asc
 chmod 644 /etc/apt/keyrings/yadori.asc
 printf 'deb [signed-by=/etc/apt/keyrings/yadori.asc] file:/test/old %s main\n' "$VERSION_CODENAME" > /etc/apt/sources.list.d/yadori.list
-apt-get update -qq
+apt-get update -o APT::Update::Error-Mode=any
 apt-get install -y -qq yadori
 # 以後は配布元の切替と宿りの更新だけを検査する。
 mkdir /tmp/os-sources
@@ -28,7 +29,7 @@ runuser -u tester -- yadori state
 find "$data" -type f -exec sha256sum {} + | sort > /tmp/before
 old=$(dpkg-query -W -f='${Version}' yadori)
 sed -i s,/test/old,/test/new, /etc/apt/sources.list.d/yadori.list
-apt-get update -qq
+apt-get update -o APT::Update::Error-Mode=any
 apt-get upgrade -y -qq
 new=$(dpkg-query -W -f='${Version}' yadori)
 dpkg --compare-versions "$new" gt "$old"
