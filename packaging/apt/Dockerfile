@@ -17,9 +17,8 @@ RUN apt-get update -o APT::Update::Error-Mode=any && apt-get install -y --no-ins
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /src
 COPY pyproject.toml uv.lock README.md ./
-COPY backend/src backend/src
-RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.txt \
-    && uv build --wheel --out-dir /tmp/wheels
+COPY dist/*.whl /tmp/wheels/
+RUN uv export --locked --no-dev --no-emit-project -o /tmp/requirements.txt
 RUN uv venv --python /usr/bin/python3 /usr/lib/yadori/venv \
     && uv pip sync --python /usr/lib/yadori/venv/bin/python --require-hashes --no-build /tmp/requirements.txt \
     && uv pip install --python /usr/lib/yadori/venv/bin/python --compile-bytecode --no-deps --no-build /tmp/wheels/*.whl

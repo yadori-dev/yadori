@@ -38,16 +38,19 @@ sudo apt remove yadori
 
 ## 保守する人が作る・確かめる
 
-Docker、dpkg-dev、apt-utils、GnuPG が必要です。ビルド用の OS は公式配布元を HTTPS / IPv4 で参照します。TLS の公開ルート証明書は Debian の公式パッケージから用意します。Ubuntu で必要な部品は main だけから取得します。開発中の製品版は pyproject.toml と uv.lock に揃えます。公開時は main に取り込まれたコードの Release タグを読み、両ファイルの版と一致することを確かめてから、そのタグの版を配布します。
+uv、Docker、dpkg-dev、apt-utils、GnuPG が必要です。ビルド用の OS は公式配布元を HTTPS / IPv4 で参照します。TLS の公開ルート証明書は Debian の公式パッケージから用意します。Ubuntu で必要な部品は main だけから取得します。製品版は hatch-vcs が Git タグから求めます。pyproject.toml は `dynamic = ["version"]` とし、製品版の番号は pyproject.toml にも uv.lock にも持ちません。公開時は main に取り込まれたタグのコードから Python の配布物（wheel）を先に作り、同じ wheel を両 OS の .deb に入れます。
 
 ```bash
 version=$(bash packaging/apt/version.sh)
 bash packaging/apt/test-version.sh
+uv build --wheel --out-dir dist
 docker build --build-arg BASE_IMAGE=ubuntu:24.04 --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
 docker build --build-arg BASE_IMAGE=debian:13-slim --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
 docker build --target os -t yadori-test-ubuntu -f packaging/apt/Dockerfile .
 APT_UBUNTU_IMAGE=yadori-test-ubuntu bash packaging/apt/test.sh /tmp/yadori-packages
 ```
+
+手元で繰り返しビルドするときは、dist に異なる版の wheel を混在させないでください。タグのない開発中のコードは `.post1.devN` を含む開発版になります。apt 用には `.dev` を `~dev` に置き換えます。正式 Release は `X.Y.Z` だけを公開します。
 
 テストは一時的な鍵で二つの配布元を作り、使い捨ての OS で導入・更新・起動・削除・保存物の維持・署名改変の拒否を確かめます。更新前のパッケージは同じ内容で版だけ下げた検査用です。過去の製品版からの保存形式の移行は別の検査です。手元のネットワークで Docker の接続に制限がある場合は、ビルドに `--network host`、テストに `APT_TEST_NETWORK=host` を指定できます。
 
@@ -59,9 +62,9 @@ GitHub の Pages の公開方法を GitHub Actions にします。`github-pages`
 
 [GitFlow のリリース手順](../../CONTRIBUTING.md#リリースの発行)に従い、release または hotfix を main に取り込んでから、`vX.Y.Z` タグの GitHub Release を発行します。発行すると「apt 配布」が自動で動きます。
 
-タグと pyproject.toml / uv.lock の版が揃い、そのタグのコードが main に取り込まれていれば、`X.Y.Z+noble` と `X.Y.Z+trixie` の .deb を作って検査します。成功した同じ配布物を発行済み Release に添付し、署名付き apt 配布元も更新します。利用者は `apt update` と `apt upgrade` でその版を受け取れます。
+タグのコードが main に取り込まれていれば、hatch-vcs がタグから版を求め、`X.Y.Z+noble` と `X.Y.Z+trixie` の .deb を作って検査します。成功した同じ配布物を発行済み Release に添付し、署名付き apt 配布元も更新します。利用者は `apt update` と `apt upgrade` でその版を受け取れます。
 
-Release の発行後に別の公開ボタンを押す必要はありません。PR と workflow の手動実行は検査だけで、署名鍵を読みません。タグと製品版が違う場合、タグのコードが main にない場合、未確定の `0.0.0`、プレリリースは公開できません。古い実行の再試行で最新版を巻き戻さないよう、apt へ公開するのは GitHub の最新の正式 Release だけです。公開段の失敗は、発行した Release の Actions 実行から再試行します。
+Release の発行後に別の公開ボタンを押す必要はありません。PR と workflow の手動実行は検査だけで、署名鍵を読みません。Git から求めた版と Release タグが違う場合（タグのコードへ未コミットの変更がある場合など）、タグのコードが main にない場合、未確定の `0.0.0`、プレリリースは公開できません。古い実行の再試行で最新版を巻き戻さないよう、apt へ公開するのは GitHub の最新の正式 Release だけです。公開段の失敗は、発行した Release の Actions 実行から再試行します。
 
 公開先はこのリポジトリの Pages 全体を使用します。別のサイトを同じ Pages に置いている場合は公開しないでください。公開物には今回の版だけを含め、以前の版を取得する配布元としては使いません。鍵を替える場合は、利用者が新しい鍵へ切り替えられる手順を先に案内します。
 

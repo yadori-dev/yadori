@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-version=${1:?パッケージの版が必要です}
-if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo '版は 0.1.0 の形で指定してください' >&2
+python_version=${1:?パッケージの版が必要です}
+if [[ ! "$python_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?$ ]]; then
+    echo '対応していない版の形式です' >&2
     exit 1
 fi
-project_version=$(python3 -c 'import tomllib; print(tomllib.load(open("/src/pyproject.toml", "rb"))["project"]["version"])')
-[[ "$version" == "$project_version" ]] || { echo 'pyproject.toml と版が一致しません' >&2; exit 1; }
+installed_version=$(/usr/lib/yadori/venv/bin/python -I -c 'from importlib.metadata import version; print(version("yadori"))')
+[[ "$python_version" == "$installed_version" ]] || { echo 'wheel と指定された版が一致しません' >&2; exit 1; }
+# 開発版を正式版より古いものとして apt が比較できるようにする。
+version=${python_version/.dev/~dev}
 . /etc/os-release
 case "$VERSION_CODENAME" in
     noble) python_range='python3 (>= 3.12), python3 (<< 3.13)' ;;

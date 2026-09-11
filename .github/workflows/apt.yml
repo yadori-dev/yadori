@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   version:
-    name: Release タグと製品版を確認する
+    name: Git タグから製品版を決める
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     outputs:
@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
       - name: 版を選ぶ入口を検査する
         run: bash packaging/apt/test-version.sh
       - name: 今回配る版を決める
@@ -32,6 +33,13 @@ jobs:
           test "$PRERELEASE" != true
           version=$(bash packaging/apt/version.sh "$RELEASE_TAG")
           echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Git の情報がある場所で Python 配布物を作る
+        run: uv build --wheel --out-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel
+          path: dist/*.whl
+          if-no-files-found: error
 
   build:
     needs: version
@@ -44,6 +52,10 @@ jobs:
           - {image: 'debian:13-slim', suite: trixie}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-wheel
+          path: dist
       - name: 配布物を作る
         env:
           IMAGE: ${{ matrix.image }}
@@ -98,7 +110,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          bash packaging/apt/version.sh "$RELEASE_TAG"
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$(git rev-parse HEAD)"
           latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           test "$latest" = "$RELEASE_TAG"
       - uses: actions/download-artifact@v4
