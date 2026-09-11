@@ -1,17 +1,19 @@
 # yadori（宿り）
 
-対話するAIに、続く記憶・気持ち・性格を持たせ、道具が変わっても同じ相手として話し続けるための常駐プログラムです。
+対話するAIに、続く記憶・気持ち・性格を持たせ、道具が変わっても同じ相手として話し続けるためのプログラムです。
 
-会話は出来事として保存され、次に話しかけられたとき、こちらが指示しなくても関係する記憶が思い出されます。気持ちは会話で動いて時間とともに薄れ、性格は長い時間をかけて変わります。話しかけられていない間は、記憶を整理し、そこで気づいたことを「気がかり」として持ちます。気がかりが一定を越えると、宿り自身から話しかけます。
+会話は出来事として保存され、次に話しかけられたとき、こちらが指示しなくても関係する記憶が思い出されます。気持ちは会話で動いて時間とともに薄れ、性格は長い時間をかけて変わります。夢を手動で起こすと、記憶を読み直して整理します。
 
 > [!IMPORTANT]
-> 端末と Discord から話しかけて一往復でき、Claude Code には同じ記憶と気持ちを持ったまま付き添えます。気持ちは会話で動いて時間で薄れ、性格は同じ動きからゆっくり変わり、夢を起こせば記憶を読み直して残すものを選び要点の層を作ります（どれも薄い作り）。Codex など、ほかの対話する道具への付き添い、気がかり、宿りから話しかけることはこれからです。何が決まっていて何が決まっていないかは [`docs/`](docs/) を読んでください。
+> 端末と Discord から話しかけて一往復でき、Claude Code と Codex の端末での操作には、同じ記憶と気持ちを持ったまま付き添えます。気持ちは会話で動いて時間で薄れ、性格は同じ動きからゆっくり変わり、夢を起こせば記憶を読み直して残すものを選び要点の層を作ります（どれも薄い作り）。ほかの対話する道具への付き添い、気がかり、宿りから話しかけることはこれからです。何が決まっていて何が決まっていないかは [`docs/`](docs/) を読んでください。
 
 ## apt で導入する
 
-Ubuntu 24.04 / 26.04、Debian 13 の amd64 向けの配布を準備しています。[導入・更新と配布の手順](packaging/apt/README.md)を参照してください。公開元の初回設定と確定版の公開はまだ完了していません。
+Ubuntu 24.04 / 26.04、Debian 13 の amd64 に対応しています。[導入・更新の手順](packaging/apt/README.md)に従って配布元を登録し、`sudo apt install yadori` で導入します。版ごとの配布物と変更内容は [Releases](https://github.com/yadori-dev/yadori/releases) にあります。
 
 ## 動かす
+
+apt で導入した場合は `yadori` を使います。ソースから試す場合は、開発環境で `uv run yadori` を使えます。
 
 `~/.yadori/` に、その宿りが誰であるかを置きます。
 
@@ -25,7 +27,7 @@ model = "opus"
 $ cat ~/.yadori/identity.md
 わたしはそらです。ていねいな言葉で話し、園芸を好みます。
 
-$ uv run python -m yadori
+$ yadori
 （そら が居ます。空行で終わります）
 > トマトを植えました
 そら: いいですね。日当たりはどうですか。
@@ -36,14 +38,14 @@ $ uv run python -m yadori
 返事のあとの一行は、その往復で宿りの気持ちがどちらへどれだけ動いたか（返事を作る Claude Code が答える）と、いまの値です。値は −1（沈む）から +1（明るい）で、動きを積んで経過時間で薄めた和です（半減期 6 時間。仮置き）。性格は同じ動きを長い半減期（90 日）で小さく（0.1 倍）積んだ傾向です。今の気持ちと性格は次の返事の前置きにも渡ります。
 
 ```console
-$ uv run python -m yadori state
+$ yadori state
 気持ち: +0.10 落ち着いている（半減期 6 時間）
 性格: +0.01 落ち着いている（半減期 90 日、動きは 0.1 倍で効く）
 動き（新しい順）:
   2026-09-01 16:45  +0.3  ほっとした  「やっと通った！原因はタイポだった」
   2026-09-01 16:45  -0.2  心配です  「三時間やってもテストが通らなくて、もう疲れた」
 
-$ uv run python -m yadori state --at 2026-09-01T16:45:29+09:00
+$ yadori state --at 2026-09-01T16:45:29+09:00
 気持ち: -0.20 落ち着いている（2026-09-01T16:45:29+09:00 時点）
 性格: -0.02 落ち着いている（2026-09-01T16:45:29+09:00 時点）
 動き（新しい順）:
@@ -55,7 +57,7 @@ $ uv run python -m yadori state --at 2026-09-01T16:45:29+09:00
 ### 夢を起こす
 
 ```console
-$ uv run python -m yadori dream
+$ yadori dream
 夢: 2026-09-01 14:46 から 16:45 までの 11 件を読み、4 件を選びました
 要点: 2 件を残しました
   - テストが通らずに疲れていたが、原因はタイポで、通ってほっとした
@@ -63,7 +65,7 @@ $ uv run python -m yadori dream
 気づき: 無し
 選んだ 4 件になぞった記録を残しました
 
-$ uv run python -m yadori dream
+$ yadori dream
 夢: 新しい記憶がありません。読み直しませんでした
 ```
 
@@ -87,7 +89,7 @@ $ uv run python -m yadori dream
 
 ### Claude Code に付き添う
 
-まず、yadori のリポジトリで一度だけ手元の命令として入れます。
+apt で導入済みなら、次の準備は不要です。ソースから使う場合は、yadori のリポジトリで一度だけ手元の命令として入れます。
 
 ```console
 $ uv tool install --editable .
@@ -106,6 +108,10 @@ $ yadori claude
 
 作業場所の設定がまだ信頼されていない、`.mcp.json` の利用可否が決まっていない、定額契約以外の接続先が選ばれている場合は、何を確かめればよいかを出して起動しません。これは普段の Claude Code 側で内容を確認してから、もう一度 `yadori claude` を実行してください。
 
+### Codex に付き添う
+
+Codex にログイン済みの端末で、付き添わせたい作業場所から `yadori codex` を実行します。宿りの名乗り、記憶、気持ちは同じ設定を使います。Codex のデスクトップ画面は対象外です。
+
 ### Discord で話す
 
 ```console
@@ -113,7 +119,7 @@ $ cat ~/.yadori/discord.toml
 token = "<Discord の bot のトークン>"
 owner_id = 123456789012345678
 
-$ uv run python -m yadori discord
+$ yadori discord
 （そら が Discord に居ます。終わるには Ctrl-C）
 ```
 
@@ -134,21 +140,23 @@ Discord から宿りへ話しかけられます。端末で話した続きが Di
 
 ## 思い出す質を測る
 
+次はリポジトリの `evals/recall.toml` を使う例です。apt 版には評価セットを同梱しないため、`--eval` で手元の評価セットを指定してください。
+
 ```console
-$ uv run python -m yadori measure
+$ yadori measure
 埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） 添え書き: 覚える「検索文書: 」 問い合わせ「検索クエリ: 」
 大きさ 0.15GB / 読み込み 0.416秒 / 一発話 0.003秒
 条件: 直近6往復・上限5件・下限0.85
 5問中 5問で期待したやりとりが上位3件に入った
 出てはいけないやりとりが出た問: 0問
 
-$ uv run python -m yadori measure --floor 0.80
+$ yadori measure --floor 0.80
 （今の条件と、下限を変えた条件の差を問ごとに出す）
 
-$ uv run python -m yadori measure --embedding characters --floor 0.21
+$ yadori measure --embedding characters --floor 0.21
 （語の重なりだけを見る埋め込みで測る。下限の意味は埋め込みごとに違うため、添えて指す）
 
-$ uv run python -m yadori measure --eval <手元の評価セット> --embedding multilingual --floor 0.50
+$ yadori measure --eval <手元の評価セット> --embedding multilingual --floor 0.50
 （前の多言語の AIモデルで測る。未取得なら「取得します」と大きさと取得先を出してから取得する）
 埋め込み: paraphrase-multilingual-MiniLM-L12-v2（fastembed-0.8.0） 添え書き: 無し
 大きさ 0.25GB / 読み込み 0.921秒 / 一発話 0.076秒
@@ -165,7 +173,7 @@ AIモデルは初回に取得し、`YADORI_HOME` の下の `models/` に置き�
 ### 実際の会話の記録から評価セットの下書きを作る
 
 ```console
-$ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml
+$ yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml
 候補を引いた 埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
 記録: 28 セッション、中身のある発話 151 件（読めず飛ばしたファイル 0）
 覚えさせる発話: 106 件
@@ -181,7 +189,7 @@ $ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の
 記録が増えたら、同じ下書きを指して `--append` を付けます。下書きの冒頭にある `[covered]`（前回の範囲。どの時刻までの記録をどのディレクトリから読んだか）より後に増えた記録だけが読まれ、新しい問が末尾に確認前として足されます。前回の問と、人が付けた確認・消した問・変えた名前は一字も変わりません。
 
 ```console
-$ uv run python -m yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml --append
+$ yadori evals draft --from ~/.claude/projects/<作業場所の記録> --out ~/yadori-evals/real-recall.toml --append
 候補を引いた 埋め込み: sirasagi62/ruri-v3-30m-ONNX（fastembed-0.8.0） / 条件: 直近6往復・候補10件・下限0.3 / 判定: opus
 前回の範囲: 2026-08-31 15:20 まで、<記録のディレクトリ>、飛ばしたファイル 0、28 セッション
 前回の下書き: 覚えさせる発話 106 件、問 44 問
