@@ -134,12 +134,17 @@ def test_ST_079_002_人物を往復しても原文を混ぜない(tmp_path: Path
             settings = SettingsFile(tmp_path).read()
             Startup(tmp_path).settle(memories, settings)
             _ = Conversation(memories, CharacterPairs(), Ticking()).remember(
-                identifier, text, "覚えました", Moved.unmoved()
+                identifier,
+                text,
+                "覚えました",
+                Moved(0.6 if identifier == "そら" else -0.4, "別々の動き"),
             )
             assert edit(tmp_path, "3\n1\ny\n5\n")[0] == 0
         assert SettingsFile(tmp_path).read().dweller.id == "そら"
         assert [episode.utterance for episode in memories.recent("そら", 5)] == ["トマト"]
         assert [episode.utterance for episode in memories.recent("umi", 5)] == ["船"]
+        assert [shift.delta for shift in memories.shifts("そら")] == [0.6]
+        assert [shift.delta for shift in memories.shifts("umi")] == [-0.4]
     finally:
         memories.close()
 
