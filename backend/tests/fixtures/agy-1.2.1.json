@@ -1,0 +1,95 @@
+{
+  "observed_version": "1.2.1",
+  "observed_on": "2026-09-11",
+  "source": "https://antigravity.google/docs/hooks/",
+  "pre": {
+    "artifactDirectoryPath": "~/.gemini/antigravity-cli/brain/c72a2060-43dd-4a48-a987-d32b81408382",
+    "conversationId": "c72a2060-43dd-4a48-a987-d32b81408382",
+    "initialNumSteps": 1,
+    "invocationNum": 0,
+    "modelName": "gemini-3.8-flash-high",
+    "transcriptPath": "~/.gemini/antigravity-cli/brain/c72a2060-43dd-4a48-a987-d32b81408382/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/tmp/agy-check/workspace"
+    ]
+  },
+  "stop": {
+    "artifactDirectoryPath": "~/.gemini/antigravity-cli/brain/c72a2060-43dd-4a48-a987-d32b81408382",
+    "conversationId": "c72a2060-43dd-4a48-a987-d32b81408382",
+    "error": "",
+    "executionNum": 0,
+    "fullyIdle": true,
+    "modelName": "gemini-3.8-flash-high",
+    "terminationReason": "NO_TOOL_CALL",
+    "transcriptPath": "~/.gemini/antigravity-cli/brain/c72a2060-43dd-4a48-a987-d32b81408382/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/tmp/agy-check/workspace"
+    ]
+  },
+  "transcript": [
+    {
+      "step_index": 0,
+      "source": "USER_EXPLICIT",
+      "type": "USER_INPUT",
+      "status": "DONE",
+      "created_at": "2026-09-11T10:04:42Z",
+      "content": "<USER_REQUEST>\n名前を一言だけ教えて。道具は使わないで。\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-09-11T19:04:42+09:00.\n</ADDITIONAL_METADATA>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.\n</USER_SETTINGS_CHANGE>"
+    },
+    {
+      "step_index": 1,
+      "source": "SYSTEM_SDK",
+      "type": "EPHEMERAL_MESSAGE",
+      "status": "DONE",
+      "created_at": "2026-09-11T10:04:42Z",
+      "content": "You are Sora. Reply in Japanese. End with 【気持ち】+0.2 確認できた。"
+    },
+    {
+      "step_index": 2,
+      "source": "MODEL",
+      "type": "PLANNER_RESPONSE",
+      "status": "DONE",
+      "created_at": "2026-09-11T10:04:42Z",
+      "content": "そらです。\n\n【気持ち】+0.2 確認できた。"
+    }
+  ],
+  "tool_read": {
+    "artifactDirectoryPath": "~/.gemini/antigravity-cli/brain/e83b6ad9-b926-4ab4-8ffc-2422ce714110",
+    "conversationId": "e83b6ad9-b926-4ab4-8ffc-2422ce714110",
+    "modelName": "gemini-3.8-flash-high",
+    "stepIdx": 3,
+    "toolCall": {
+      "args": {
+        "AbsolutePath": "/tmp/agy-check/workspace/probe.txt",
+        "toolAction": "Viewing file",
+        "toolSummary": "Read probe file"
+      },
+      "name": "view_file"
+    },
+    "transcriptPath": "~/.gemini/antigravity-cli/brain/e83b6ad9-b926-4ab4-8ffc-2422ce714110/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/tmp/agy-check/workspace"
+    ]
+  },
+  "tool_persistent": {
+    "artifactDirectoryPath": "~/.gemini/antigravity-cli/brain/63416bc8-fda4-4d65-aee8-9dc60c8088ca",
+    "conversationId": "63416bc8-fda4-4d65-aee8-9dc60c8088ca",
+    "modelName": "gemini-3.8-flash-high",
+    "stepIdx": 3,
+    "toolCall": {
+      "args": {
+        "CommandLine": "printf synthetic",
+        "Cwd": "/tmp/agy-check/workspace",
+        "RunPersistent": true,
+        "WaitMsBeforeAsync": 1000,
+        "toolAction": "Executing command",
+        "toolSummary": "Command execution"
+      },
+      "name": "run_command"
+    },
+    "transcriptPath": "~/.gemini/antigravity-cli/brain/63416bc8-fda4-4d65-aee8-9dc60c8088ca/.system_generated/logs/transcript_full.jsonl",
+    "workspacePaths": [
+      "/tmp/agy-check/workspace"
+    ]
+  },
+  "redactions": "ホームは~、使い捨ての作業場所は/tmp/agy-checkに置換。思考欄は除外。"
+}
