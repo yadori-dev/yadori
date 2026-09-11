@@ -1,0 +1,101 @@
+name: apt 配布
+
+on:
+  pull_request:
+    paths: ['packaging/apt/**', '.github/workflows/apt.yml', 'pyproject.toml', 'uv.lock', 'backend/src/**', 'assets/branding/yadori-icon-v2.png']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 検査後に GitHub Pages へ公開する（main の確定版だけ）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - {image: 'ubuntu:24.04', suite: noble}
+          - {image: 'debian:13-slim', suite: trixie}
+    steps:
+      - uses: actions/checkout@v5
+      - name: 版を読む
+        id: version
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: 配布物を作る
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: docker build --build-arg BASE_IMAGE="$IMAGE" --build-arg PACKAGE_VERSION="$VERSION" --target package --output type=local,dest=packages -f packaging/apt/Dockerfile .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.suite }}
+          path: packages/*.deb
+          retention-days: 7
+
+  verify:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          merge-multiple: true
+          path: packages
+      - run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
+      - name: 署名・導入・更新・削除を確かめる
+        run: bash packaging/apt/test.sh packages
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: apt-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: 確定版を確認する
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          test "$version" != 0.0.0
+          test "$(git rev-parse "v$version^{commit}")" = "$(git rev-parse HEAD)"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          merge-multiple: true
+          path: packages
+      - run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
+      - name: 署名した配布元を作る
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_FINGERPRINT: ${{ vars.APT_SIGNING_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          export GNUPGHOME=$(mktemp -d)
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$APT_SIGNING_KEY" | gpg --batch --import
+          bash packaging/apt/repository.sh packages public "$APT_SIGNING_FINGERPRINT"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: 公開する
+        id: deployment
+        uses: actions/deploy-pages@v4
