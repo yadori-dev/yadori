@@ -38,13 +38,14 @@ sudo apt remove yadori
 
 ## 保守する人が作る・確かめる
 
-Docker、dpkg-dev、apt-utils、GnuPG が必要です。版は pyproject.toml を正とします。公開用は main の同じコミットを指す `v<版>` タグが必要です。
+Docker、dpkg-dev、apt-utils、GnuPG が必要です。ビルド用の OS は公式配布元を HTTPS / IPv4 で参照します。TLS の公開ルート証明書は Debian の公式パッケージから用意します。Ubuntu で必要な部品は main だけから取得します。版は pyproject.toml を正とします。公開用は main の同じコミットを指す `v<版>` タグが必要です。
 
 ```bash
 version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
 docker build --build-arg BASE_IMAGE=ubuntu:24.04 --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
 docker build --build-arg BASE_IMAGE=debian:13-slim --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
-bash packaging/apt/test.sh /tmp/yadori-packages
+docker build --target os -t yadori-test-ubuntu -f packaging/apt/Dockerfile .
+APT_UBUNTU_IMAGE=yadori-test-ubuntu bash packaging/apt/test.sh /tmp/yadori-packages
 ```
 
 テストは一時的な鍵で二つの配布元を作り、使い捨ての OS で導入・更新・起動・削除・保存物の維持・署名改変の拒否を確かめます。更新前のパッケージは同じ内容で版だけ下げた検査用です。過去の製品版からの保存形式の移行は別の検査です。手元のネットワークで Docker の接続に制限がある場合は、ビルドに `--network host`、テストに `APT_TEST_NETWORK=host` を指定できます。
