@@ -59,7 +59,7 @@ def build(root: Path, **overrides: str) -> None:
     directory = root / "docs" / "110_requirements"
     directory.mkdir(parents=True, exist_ok=True)
     for name, body in documents.items():
-        (directory / name).write_text(body, encoding="utf-8")
+        _ = (directory / name).write_text(body, encoding="utf-8")
     (root / "docs" / "010_decisions").mkdir(parents=True, exist_ok=True)
     (root / "docs" / "210_increments").mkdir(parents=True, exist_ok=True)
 
@@ -120,10 +120,109 @@ def test_扱う要求の無い課題は落ちる(tmp_path: Path) -> None:
 def test_ADR_の番号が重複していると落ちる(tmp_path: Path) -> None:
     build(tmp_path)
     decisions = tmp_path / "docs" / "010_decisions"
-    (decisions / "ADR-001-片方.md").write_text("# ADR-001", encoding="utf-8")
-    (decisions / "ADR-001-もう片方.md").write_text("# ADR-001", encoding="utf-8")
+    _ = (decisions / "ADR-001-片方.md").write_text("# ADR-001", encoding="utf-8")
+    _ = (decisions / "ADR-001-もう片方.md").write_text("# ADR-001", encoding="utf-8")
 
     result = run(tmp_path)
 
     assert result.returncode == 1
     assert "ADR-001 が重複している" in result.stderr
+
+
+INCREMENT = """# INC-006 例
+
+| 要件 | 振る舞い |
+|---|---|
+| `SPEC-006-001` | 話しかけると応対が返る |
+
+| テスト | 対応 | 入口と入力 | 観測する結果 |
+|---|---|---|---|
+| `ST-006-001` | `SPEC-006-001` | 架空の宿りへ話しかける | 応対が返る |
+"""
+
+
+def build_increment(root: Path, body: str, name: str = "INC-006.md") -> None:
+    build(root)
+    _ = (root / "docs" / "210_increments" / name).write_text(body, encoding="utf-8")
+
+
+def test_要件とテストが対なら通る(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT)
+
+    result = run(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_確かめるテストの無い要件は落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT + "| `SPEC-006-002` | 名乗りどおりに返る |\n")
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "SPEC-006-002 を確かめる ST が無い" in result.stderr
+
+
+def test_要件を指さないテストは落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT + "| `ST-006-002` | | 何かする | 何か返る |\n")
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "ST-006-002 が対応する SPEC を指していない" in result.stderr
+
+
+def test_同じ増分に無い要件を指すテストは落ちる(tmp_path: Path) -> None:
+    build_increment(
+        tmp_path, INCREMENT + "| `ST-006-002` | `SPEC-006-999` | 何かする | 何か返る |\n"
+    )
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "ST-006-002 が同じ増分に無い SPEC-006-999 を指している" in result.stderr
+
+
+def test_設計と結合テストにも同じ規則が働く(tmp_path: Path) -> None:
+    build_increment(
+        tmp_path,
+        INCREMENT + "\n| 判断 | 内容 |\n|---|---|\n| `AD-006-001` | 記憶を宿りへ結ぶ |\n",
+    )
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "AD-006-001 を確かめる IT が無い" in result.stderr
+
+
+def test_別の増分の番号で定義された識別子は落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT.replace("| `ST-006-001`", "| `ST-007-001`"))
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "別の増分の番号を挟んで定義されている" in result.stderr
+
+
+def test_別の増分の判断を本文から指すのは通る(tmp_path: Path) -> None:
+    # 前の増分で決めた構造の上に積むことは正しい。
+    build_increment(
+        tmp_path,
+        INCREMENT.replace(
+            "| `SPEC-006-001` | 話しかけると応対が返る |",
+            "| `SPEC-006-001` | 話しかけると応対が返る（`AD-005-001` の口をそのまま使う） |",
+        ),
+    )
+
+    result = run(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_増分の名前がIssue番号でないと落ちる(tmp_path: Path) -> None:
+    build_increment(tmp_path, INCREMENT, name="INC-最初.md")
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "INC-<Issue番号>.md でない" in result.stderr

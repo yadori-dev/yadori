@@ -17,7 +17,7 @@ def build(root: Path, files: dict[str, str]) -> None:
     for name, body in files.items():
         path = root / "backend" / "src" / "yadori" / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
+        _ = path.write_text(body, encoding="utf-8")
 
 
 def run(root: Path) -> subprocess.CompletedProcess[str]:

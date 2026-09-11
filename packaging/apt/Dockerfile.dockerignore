@@ -1,0 +1,12 @@
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!packaging
+!packaging/apt
+!packaging/apt/build.sh
+!assets
+!assets/branding
+!assets/branding/yadori-icon-v2.png
+!dist
+!dist/*.whl

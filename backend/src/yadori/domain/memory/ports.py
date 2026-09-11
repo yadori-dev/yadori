@@ -1,0 +1,167 @@
+"""記憶の規則が外へ求めること。
+
+実装は adapter が持つ。この層は保存の方法も埋め込みの実装も知らない。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Collection
+from datetime import datetime
+from typing import Protocol
+
+from yadori.domain.memory.model import (
+    Dream,
+    Dweller,
+    Episode,
+    Gist,
+    Identity,
+    Moved,
+    Provenance,
+    Retrieval,
+    Shift,
+    Vector,
+)
+
+
+class NameNotDeclared(Exception):
+    """名乗りを持たない宿りへ話しかけられた。
+
+    応対を作らず、記憶も増やさない。
+    """
+
+    def __init__(self, dweller_id: str) -> None:
+        super().__init__(f"宿り {dweller_id} は名乗りを持っていない")
+        self.dweller_id: str = dweller_id
+
+
+class EmbeddingsUnavailable(Exception):
+    """埋め込みを使えない。
+
+    思い出す手順へ入る前に断る。理由には何をすればよいかを含める。記憶は
+    増やさない。
+    """
+
+
+class RememberingConflict(Exception):
+    """同じ出典へ、以前と異なる一往復または気持ちの動きが届いた。"""
+
+
+class Memories(Protocol):
+    """宿りの記憶の保存先。
+
+    原文とインデックスは別々に扱う。インデックスは原文から作り直せる派生物である。
+    """
+
+    def settle(self, dweller: Dweller) -> None: ...
+
+    def dweller(self, dweller_id: str) -> Dweller | None: ...
+
+    def current_identity(self, dweller_id: str) -> Identity | None: ...
+
+    def identity_at(self, dweller_id: str, version: int) -> Identity | None: ...
+
+    def write_identity(self, dweller_id: str, text: str) -> Identity: ...
+
+    def recent(self, dweller_id: str, limit: int) -> tuple[Episode, ...]: ...
+
+    def search(
+        self,
+        dweller_id: str,
+        model: str,
+        vector: Vector,
+        limit: int,
+        floor: float,
+        exclude: Collection[int],
+    ) -> tuple[tuple[Episode, float], ...]: ...
+
+    def write_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None = None,
+        source: str | None = None,
+    ) -> Episode: ...
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        """一往復と気持ちを一件で残し、作れる索引を添える。"""
+        ...
+
+    def count_episodes(self, dweller_id: str) -> int: ...
+
+    def episode(self, episode_id: int) -> Episode | None: ...
+
+    def write_index(self, episode_id: int, model: str, vector: Vector) -> None: ...
+
+    def clear_index(self, dweller_id: str) -> None: ...
+
+    def episodes_without_index(self, dweller_id: str, model: str) -> tuple[Episode, ...]: ...
+
+    def record_retrieval(self, episode_ids: Collection[int], at: datetime) -> None: ...
+
+    def retrieval(self, episode_id: int) -> Retrieval: ...
+
+    def record_shift(self, dweller_id: str, shift: Shift) -> None: ...
+
+    def episodes_after(self, dweller_id: str, at: datetime | None) -> tuple[Episode, ...]:
+        """時刻より後の出来事を古い順に。無しなら全部。"""
+        ...
+
+    def record_dream(
+        self,
+        dweller_id: str,
+        at: datetime,
+        read_from: datetime,
+        read_to: datetime,
+        count: int,
+        kept: int,
+        noticing: str | None,
+    ) -> Dream:
+        """夢を積み、番号の付いた記録を返す。"""
+        ...
+
+    def latest_dream(self, dweller_id: str) -> Dream | None: ...
+
+    def record_gist(self, dweller_id: str, dream_id: int, gist: Gist) -> None: ...
+
+    def gists_of_dream(self, dream_id: int) -> tuple[Gist, ...]: ...
+
+    def shifts(self, dweller_id: str) -> tuple[Shift, ...]:
+        """動きを古い順に。"""
+        ...
+
+
+class Embeddings(Protocol):
+    """文章を、意味の近いものどうしが近くなる数値の並びへ変える。
+
+    口は覚える側と問い合わせ側の二つ。添え書きを定める AIモデルは側ごとに別の語を
+    付けるため、呼ぶ側は側だけを伝え、語の中身は知らない。何で作ったか（出自）を
+    自分で答える。インデックスの名前は出自から組んだものである。
+    """
+
+    @property
+    def provenance(self) -> Provenance: ...
+
+    @property
+    def name(self) -> str: ...
+
+    def to_remember(self, text: str) -> Vector:
+        """覚える文と、作り直す文を数の並びにする。"""
+        ...
+
+    def to_recall(self, text: str) -> Vector:
+        """話しかけられた文章を数の並びにする。"""
+        ...

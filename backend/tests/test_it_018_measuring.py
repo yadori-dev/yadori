@@ -1,0 +1,193 @@
+"""INC-018 の結合テスト。測る手順の境界を確かめる。
+
+架空の会話で書く。利用者の実際の会話を使わない。
+"""
+
+from __future__ import annotations
+
+from collections.abc import Collection
+from datetime import UTC, datetime
+from typing import final
+
+import pytest
+
+from yadori.adapter.embedding import CharacterPairs
+from yadori.adapter.store import InMemoryMemories, SqliteMemories
+from yadori.domain.evaluation import CannotMeasure, Case, Exchange, RecallEval
+from yadori.domain.memory import Dweller, Episode, HowToRecall, Memories, Moved, Vector
+from yadori.usecase.evaluation import Comparing, Measuring
+
+EXCHANGES = (
+    Exchange("tomato", "ベランダにトマトの苗を植えました", "いいですね。"),
+    Exchange("tax", "住民税の納付書が届きました", "期限をお忘れなく。"),
+    Exchange("train", "電車が遅れて会議に遅れました", "大変でしたね。"),
+    Exchange("books", "図書館で小説を三冊借りました", "楽しみですね。"),
+    Exchange("movie", "昨日は古い映画を観ました", "どんなお話でしたか。"),
+    Exchange("laundry", "洗濯物がよく乾きました", "よいお天気でしたね。"),
+    Exchange("keyboard", "新しい鍵盤楽器が届きました", "気になります。"),
+    Exchange("dentist", "歯医者の予約を取りました", "よかったですね。"),
+)
+CASES = (
+    Case("引ける", "トマトはその後どうなりましたか", ("tomato",), ()),
+    Case("混ざる", "会議はどうなりましたか", (), ("train",)),
+    Case("変わらない", "為替の見通しはどうでしょうか", (), ("books",)),
+)
+RECALL_EVAL = RecallEval(within=3, exchanges=EXCHANGES, cases=CASES)
+
+# 下限を締めた条件と緩めた条件。緩めると一問が良くなり、別の一問が悪くなる。
+TIGHT = HowToRecall(recent_turns=4, found_limit=5, relevance_floor=0.30)
+LOOSE = HowToRecall(recent_turns=4, found_limit=5, relevance_floor=0.20)
+
+SORA = Dweller(id="sora", owner="架空の持ち主", name="そら", nickname="そら")
+
+
+@final
+class _WithoutIndex:
+    """インデックスを書かない保存先。ほかの操作は本物へ渡す。"""
+
+    def __init__(self, inner: InMemoryMemories) -> None:
+        self._inner: InMemoryMemories = inner
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)  # pyright: ignore[reportAny]
+
+    def write_index(self, episode_id: int, model: str, vector: Vector) -> None:
+        del episode_id, model, vector
+
+    def keep_episode(
+        self,
+        dweller_id: str,
+        utterance: str,
+        reply: str,
+        identity_version: int,
+        happened_at: datetime,
+        recalled_at: datetime | None,
+        source: str | None,
+        indexes: Collection[tuple[str, Vector]],
+        moved: Moved | None,
+    ) -> Episode:
+        del indexes
+        return self._inner.keep_episode(
+            dweller_id,
+            utterance,
+            reply,
+            identity_version,
+            happened_at,
+            recalled_at,
+            source,
+            (),
+            moved,
+        )
+
+
+class TestMeasuring:
+    def _measuring(self, recall_eval: RecallEval | None = None) -> Measuring:
+        return Measuring(recall_eval or RECALL_EVAL, InMemoryMemories, CharacterPairs())
+
+    # IT-018-001 持ち主の記憶に触れず、何度測っても同じになる
+
+    def test_IT_018_001_二度測っても同じ結果になる(self) -> None:
+        measuring = self._measuring()
+
+        assert measuring.at(TIGHT) == measuring.at(TIGHT)
+
+    def test_IT_018_001_持ち主の記憶を開かない(self) -> None:
+        owned = SqliteMemories(":memory:")
+        owned.settle(SORA)
+        _ = owned.write_identity(SORA.id, "わたしはそらです。")
+        _ = owned.write_episode(SORA.id, "こんにちは", "はい", 1, datetime.now(UTC))
+        kept = owned.count_episodes(SORA.id)
+
+        _ = self._measuring().at(TIGHT)
+
+        assert owned.count_episodes(SORA.id) == kept
+        assert owned.retrieval(1).count == 0
+        owned.close()
+
+    # IT-018-002 要約が問ごとの結果と一致し、差を名指しできる
+
+    def test_IT_018_002_要約が問ごとの結果と一致する(self) -> None:
+        measured = self._measuring().at(LOOSE)
+
+        assert measured.total == len(CASES)
+        assert measured.met == sum(
+            1 for outcome in measured.outcomes if outcome.met(measured.within)
+        )
+        assert measured.intruded == sum(
+            1
+            for outcome in measured.outcomes
+            if any(one.rank is not None for one in outcome.forbidden)
+        )
+
+    def test_IT_018_002_良くなった問と悪くなった問を名指しし変わらない問は出さない(self) -> None:
+        measuring = self._measuring()
+
+        difference = Comparing(measuring.at(TIGHT), measuring.at(LOOSE)).difference()
+
+        assert [shifted.case for shifted in difference.better] == ["引ける"]
+        assert [shifted.case for shifted in difference.worse] == ["混ざる"]
+        named = {shifted.case for shifted in difference.better + difference.worse}
+        assert "変わらない" not in named
+
+    def test_IT_018_002_全体では良くなっても悪くなった問が消えない(self) -> None:
+        measuring = self._measuring()
+        before = measuring.at(TIGHT)
+        after = measuring.at(LOOSE)
+
+        difference = Comparing(before, after).difference()
+
+        # 満たした問の数は変わらないが、中身は入れ替わっている。
+        assert before.met == after.met
+        assert difference.worse != ()
+
+    # IT-018-003 欠けていれば一問も測らない
+
+    def test_IT_018_003_無いやりとりを指すと測らない(self) -> None:
+        broken = RecallEval(
+            within=3,
+            exchanges=EXCHANGES,
+            cases=(Case("壊れ", "なにか", ("nothing",), ()),),
+        )
+
+        with pytest.raises(CannotMeasure, match="無いやりとりを指している"):
+            _ = self._measuring(broken).at(TIGHT)
+
+    def test_IT_018_003_期待と禁止に同じやりとりを指すと測らない(self) -> None:
+        broken = RecallEval(
+            within=3,
+            exchanges=EXCHANGES,
+            cases=(Case("壊れ", "なにか", ("tomato",), ("tomato",)),),
+        )
+
+        with pytest.raises(CannotMeasure, match="期待と禁止に指している"):
+            _ = self._measuring(broken).at(TIGHT)
+
+    def test_IT_018_003_期待が直近に入った問は満たさずではなく測れずになる(self) -> None:
+        # 直近を広げると tomato が直近へ入り、意味で探す側に現れなくなる。
+        wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
+
+        measured = self._measuring().at(wide)
+
+        drawn = next(one for one in measured.outcomes if one.case == "引ける")
+        assert not drawn.measurable
+        assert drawn.in_recent == ("tomato",)
+        assert not drawn.met(measured.within)
+        # 測れない問は、満たした数の母数からも外れる。
+        assert measured.total == len(CASES) - 1
+        assert measured.unmeasurable == 1
+
+    def test_IT_018_003_測れない問は差に入れない(self) -> None:
+        measuring = self._measuring()
+        wide = HowToRecall(recent_turns=8, found_limit=5, relevance_floor=0.20)
+
+        difference = Comparing(measuring.at(LOOSE), measuring.at(wide)).difference()
+
+        named = {shifted.case for shifted in difference.better + difference.worse}
+        assert "引ける" not in named
+
+    def test_IT_018_003_インデックスが欠けると測らない(self) -> None:
+        def fresh() -> Memories:
+            return _WithoutIndex(InMemoryMemories())  # pyright: ignore[reportReturnType]
+
+        with pytest.raises(CannotMeasure, match="インデックスを持たない"):
+            _ = Measuring(RECALL_EVAL, fresh, CharacterPairs()).at(TIGHT)
