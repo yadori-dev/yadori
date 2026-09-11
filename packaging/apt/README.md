@@ -38,10 +38,11 @@ sudo apt remove yadori
 
 ## 保守する人が作る・確かめる
 
-Docker、dpkg-dev、apt-utils、GnuPG が必要です。ビルド用の OS は公式配布元を HTTPS / IPv4 で参照します。TLS の公開ルート証明書は Debian の公式パッケージから用意します。Ubuntu で必要な部品は main だけから取得します。版は pyproject.toml を正とします。公開用は main の同じコミットを指す `v<版>` タグが必要です。
+Docker、dpkg-dev、apt-utils、GnuPG が必要です。ビルド用の OS は公式配布元を HTTPS / IPv4 で参照します。TLS の公開ルート証明書は Debian の公式パッケージから用意します。Ubuntu で必要な部品は main だけから取得します。開発中の製品版は pyproject.toml と uv.lock に揃えます。公開時は main に取り込まれたコードの Release タグを読み、両ファイルの版と一致することを確かめてから、そのタグの版を配布します。
 
 ```bash
-version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+version=$(bash packaging/apt/version.sh)
+bash packaging/apt/test-version.sh
 docker build --build-arg BASE_IMAGE=ubuntu:24.04 --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
 docker build --build-arg BASE_IMAGE=debian:13-slim --build-arg PACKAGE_VERSION="$version" --target package --output type=local,dest=/tmp/yadori-packages -f packaging/apt/Dockerfile .
 docker build --target os -t yadori-test-ubuntu -f packaging/apt/Dockerfile .
@@ -52,9 +53,15 @@ APT_UBUNTU_IMAGE=yadori-test-ubuntu bash packaging/apt/test.sh /tmp/yadori-packa
 
 ## 公開する人が初回に設定する
 
-GitHub の Pages の公開方法を GitHub Actions にします。`github-pages` 環境に承認者と main だけから公開できる制約を設定します。そこで公開用の署名鍵を `APT_SIGNING_KEY` secret に、フィンガープリントを `APT_SIGNING_FINGERPRINT` variable に登録します。署名鍵は自動実行用のパスフレーズなしの専用鍵を使い、管理者の個人鍵を使いません。鍵と退避用のコピーはリポジトリへ入れません。
+GitHub の Pages の公開方法を GitHub Actions にします。`github-pages` 環境の公開元は `v*` タグを許可します。GitHub Release の発行を公開の操作とし、環境に追加の手動承認は設けません。そこで公開用の署名鍵を `APT_SIGNING_KEY` secret に、フィンガープリントを `APT_SIGNING_FINGERPRINT` variable に登録します。署名鍵は自動実行用のパスフレーズなしの専用鍵を使い、管理者の個人鍵を使いません。鍵と退避用のコピーはリポジトリへ入れません。
 
-main の確定版を選び、「apt 配布」の手動実行で公開を有効にします。ビルドと検査が成功した後、環境の承認を経て署名・公開します。PR からの実行は検査までで、公開鍵の秘密部分を読みません。未確定の `0.0.0` は公開できません。
+## リリースのたびに行うこと
+
+[GitFlow のリリース手順](../../CONTRIBUTING.md#リリースの発行)に従い、release または hotfix を main に取り込んでから、`vX.Y.Z` タグの GitHub Release を発行します。発行すると「apt 配布」が自動で動きます。
+
+タグと pyproject.toml / uv.lock の版が揃い、そのタグのコードが main に取り込まれていれば、`X.Y.Z+noble` と `X.Y.Z+trixie` の .deb を作って検査します。成功した同じ配布物を発行済み Release に添付し、署名付き apt 配布元も更新します。利用者は `apt update` と `apt upgrade` でその版を受け取れます。
+
+Release の発行後に別の公開ボタンを押す必要はありません。PR と workflow の手動実行は検査だけで、署名鍵を読みません。タグと製品版が違う場合、タグのコードが main にない場合、未確定の `0.0.0`、プレリリースは公開できません。古い実行の再試行で最新版を巻き戻さないよう、apt へ公開するのは GitHub の最新の正式 Release だけです。公開段の失敗は、発行した Release の Actions 実行から再試行します。
 
 公開先はこのリポジトリの Pages 全体を使用します。別のサイトを同じ Pages に置いている場合は公開しないでください。公開物には今回の版だけを含め、以前の版を取得する配布元としては使いません。鍵を替える場合は、利用者が新しい鍵へ切り替えられる手順を先に案内します。
 
