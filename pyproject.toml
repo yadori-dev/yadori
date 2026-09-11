@@ -1,6 +1,6 @@
 [project]
 name = "yadori"
-version = "0.0.0"
+dynamic = ["version"]
 description = "続く記憶と気持ちを持ち、話しかけられていない間も動く常駐プログラム"
 requires-python = ">=3.12"
 dependencies = [
@@ -19,8 +19,15 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/src/yadori"]

@@ -16,6 +16,16 @@ feature ブランチは `feature/{issue番号}-{slug}` または `feature/{slug}
 
 `main` と `develop` へ直接pushしません。`main` への PR は `release/*` と `hotfix/*` からだけです。
 
+### リリースの発行
+
+1. develop から `release/X.Y.Z` を作り、CHANGELOG を確定します。pyproject.toml と uv.lock に製品版の番号は書きません。
+2. release ブランチから main へ PR を出し、確認・承認後に merge commit で取り込みます。
+3. main に取り込まれたコミットへ `vX.Y.Z` タグを付け、GitHub Release を発行します。
+4. 発行を起点に hatch-vcs（Git タグから Python の製品版を求める仕組み）が `vX.Y.Z` から `X.Y.Z` を決め、「apt 配布」が配布物の生成・導入検査・Release への添付・署名付き apt 配布元の更新を自動で行います。公開用 workflow を別に手動実行する必要はありません。
+5. 同じ release ブランチを develop へ戻します。
+
+hotfix も main へ取り込んで Release を発行し、同じ手順で配布します。初回だけ必要な鍵と公開先の設定は[配布手順](packaging/apt/README.md#公開する人が初回に設定する)を参照してください。
+
 ### 版と互換性
 
 1.0.0未満は初期開発版です。HTTP API、保存形式、出ていく先との約束に互換性のない変更を含む場合はマイナー版を上げます（`0.1.x` → `0.2.0`）。パッチ更新は使い方を壊さない修正だけです。
