@@ -10,7 +10,7 @@ mkdir -p "$output"
 output=$(realpath "$output")
 gpg --batch --armor --export "$key" > "$output/yadori.asc"
 [[ -s "$output/yadori.asc" ]] || { echo '公開鍵がありません' >&2; exit 1; }
-for suite in noble trixie; do
+for suite in noble resolute trixie; do
     mkdir -p "$output/pool/$suite" "$output/dists/$suite/main/binary-amd64"
     found=false
     for deb in "$input"/*"+$suite"_amd64.deb; do

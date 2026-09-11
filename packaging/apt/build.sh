@@ -12,8 +12,9 @@ version=${python_version/.dev/~dev}
 . /etc/os-release
 case "$VERSION_CODENAME" in
     noble) python_range='python3 (>= 3.12), python3 (<< 3.13)' ;;
+    resolute) python_range='python3 (>= 3.14), python3 (<< 3.15)' ;;
     trixie) python_range='python3 (>= 3.13), python3 (<< 3.14)' ;;
-    *) echo '対応 OS は Ubuntu 24.04 と Debian 13 です' >&2; exit 1 ;;
+    *) echo '対応 OS は Ubuntu 24.04 / 26.04 と Debian 13 です' >&2; exit 1 ;;
 esac
 architecture=$(dpkg --print-architecture)
 [[ "$architecture" == amd64 ]] || { echo '対応 CPU は amd64 です' >&2; exit 1; }

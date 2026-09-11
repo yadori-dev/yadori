@@ -9,7 +9,7 @@ gpg --batch --passphrase '' --quick-generate-key 'yadori apt test' rsa3072 sign 
 key=$(gpg --with-colons --list-secret-keys | awk -F: '$1 == "fpr" {print $10; exit}')
 # 更新経路だけを検査するため、同じ内容で版が一つ古いパッケージを作る。
 mkdir "$work/packages"
-for suite in noble trixie; do
+for suite in noble resolute trixie; do
     debs=("$packages"/*"+$suite"_amd64.deb)
     [[ ${#debs[@]} == 1 && -f "${debs[0]}" ]]
     dpkg-deb -R "${debs[0]}" "$work/old-$suite"
@@ -20,11 +20,12 @@ done
 bash packaging/apt/repository.sh "$work/packages" "$work/old" "$key"
 bash packaging/apt/repository.sh "$packages" "$work/new" "$key"
 cp -a "$work/new" "$work/tampered"
-sed -i 's/Origin: yadori/Origin: changed/' "$work/tampered/dists/noble/InRelease"
-sed -i 's/Origin: yadori/Origin: changed/' "$work/tampered/dists/trixie/InRelease"
-for image in "${APT_UBUNTU_IMAGE:-ubuntu:24.04}" debian:13-slim; do
+for suite in noble resolute trixie; do
+    sed -i 's/Origin: yadori/Origin: changed/' "$work/tampered/dists/$suite/InRelease"
+done
+for image in "${APT_UBUNTU_IMAGE:-ubuntu:24.04}" "${APT_UBUNTU_26_IMAGE:-ubuntu:26.04}" debian:13-slim; do
     docker run --rm ${APT_TEST_NETWORK:+--network "$APT_TEST_NETWORK"} \
         -v "$work:/test:ro" -v "$(pwd)/packaging/apt/test-container.sh:/test-container.sh:ro" \
         "$image" bash /test-container.sh
 done
-printf '成功: 両 OS で導入・更新・削除と署名拒否を確認しました\n証跡用の一時領域: %s\n' "$work"
+printf '成功: 3 つの OS で導入・更新・削除と署名拒否を確認しました\n証跡用の一時領域: %s\n' "$work"
