@@ -24,14 +24,14 @@ from yadori.infrastructure.start import Startup
 from yadori.infrastructure.state import StateReport
 
 USAGE = """使い方:
-  yadori                          宿りを起こして話す
+  yadori                           宿りを起こして話す
   yadori claude                    宿りとして Claude Code を起こす
   yadori agy                       宿りとして agy を起こす
   yadori codex                     宿りとして Codex を起こす
   yadori discord                   Discord で話しかけられるのを待つ
       トークンは YADORI_HOME の discord.toml に置く
   yadori dream                     前回の夢より後の記憶を読み直し、気づきを一つ残す
-  yadori state [--at 時刻]          いまの気持ちと性格と、動きの時系列を読む
+  yadori state [--at 時刻]         いまの気持ちと性格と、動きの時系列を読む
       --at に ISO 形式の時刻を指すと、その時点の値
   yadori measure                   今の条件で測る
   yadori measure [--eval PATH] [--embedding NAME(+NAME)]
