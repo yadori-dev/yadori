@@ -30,47 +30,44 @@ from yadori.infrastructure.start import Startup
 from yadori.infrastructure.state import StateReport
 from yadori.infrastructure.tools import ToolChoice
 
-USAGE = (
-    "使い方:\n"
-    + "  yadori                            共通の優先順で道具を選び、宿りとして起こす\n"
-    + "  yadori setting                    名前・性格・人物・道具順を対話で設定する\n"
-    + "  yadori chat                       専用の端末チャットで話す\n"
-    + "  yadori claude                      宿りとして Claude Code を起こす\n"
-    + "  yadori agy                         宿りとして agy を起こす\n"
-    + "  yadori codex                       宿りとして Codex を起こす\n"
-    + "  python -m yadori discord            Discord で話しかけられるのを待つ。トークンは\n"
-    + "                                      YADORI_HOME の discord.toml に置く\n"
-    + "  python -m yadori dream              前回の夢より後の記憶を読み直し、気づきを一つ残す\n"
-    + "  python -m yadori state [--at 時刻]  いまの気持ちと性格と、動きの時系列を読む。\n"
-    + "                                      --at に ISO 形式の時刻を指すと、その時点の値\n"
-    + "  python -m yadori measure            今の条件で測る\n"
-    + "  python -m yadori measure [--eval PATH] [--embedding NAME(+NAME)]\n"
-    + "                          [--floor N] [--recent N] [--limit N]\n"
-    + "                                      条件を変えて測り、問ごとの差を出す\n"
-    + "\n"
-    + "  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価\n"
-    + "  セットは手元に置き、--eval で指す。リポジトリへ入れない。\n"
-    + "  --embedding は characters、multilingual、試す埋め込みの名前、埋め込みを\n"
-    + "  動かす道具の対応表にある 配布元/名前 を指せる。+ で並べると両方の道から\n"
-    + "  渡す。省くと既定の埋め込みで測る。結果には出自、添え書き、大きさ、\n"
-    + "  読み込みと一発話の時間が並ぶ。\n"
-    + "\n"
-    + "  python -m yadori evals draft --from PATH [--from PATH] --out FILE [--append]\n"
-    + "                                      対話する道具の記録から、評価セットの\n"
-    + "                                      下書きを作る。問は人が確かめるまで測れない。\n"
-    + "                                      --append は既にある下書きへ、前回の範囲より\n"
-    + "                                      後に増えた記録の分だけを足す。前回の問と確認は\n"
-    + "                                      変えない。前回の範囲を持つ下書きにだけ足せる\n"
-    + "\n"
-    + "  --from は Claude Code の記録のディレクトリ（~/.claude/projects）や Codex の\n"
-    + "  記録のディレクトリ（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す\n"
-    + "  仕組みで前の発話の候補を引き、その発話と候補だけを判定のため手元の\n"
-    + "  共通の優先順で選んだ道具へ渡す。記録元とは別の相手に渡ることがある。\n"
-    + "  選んだ相手は実行時に表示する。返事、時刻、作業場所は渡らず、\n"
-    + "  記録を丸ごと渡すこともない。思い出す仕組みが拾えなかった組は下書きに\n"
-    + "  出ないので手で足す。直近の範囲の組は測れないので足さない。--out は\n"
-    + "  リポジトリの外を指す。--append を付けないときは、既にあるファイルには書かない。"
-)
+USAGE = """使い方:
+  yadori                           共通の優先順で道具を選び、宿りとして起こす
+  yadori setting                   人物・名乗り・道具順を対話で設定する
+  yadori chat                      専用の端末チャットで話す
+  yadori claude                    宿りとして Claude Code を起こす
+  yadori agy                       宿りとして agy を起こす
+  yadori codex                     宿りとして Codex を起こす
+  yadori discord                   Discord で話しかけられるのを待つ
+      トークンは YADORI_HOME の discord.toml に置く
+  yadori dream                     前回の夢より後の記憶を読み直し、気づきを一つ残す
+  yadori state [--at 時刻]         いまの気持ちと性格と、動きの時系列を読む
+      --at に ISO 形式の時刻を指すと、その時点の値
+  yadori measure                   今の条件で測る
+  yadori measure [--eval PATH] [--embedding NAME(+NAME)]
+                 [--floor N] [--recent N] [--limit N]
+      条件を変えて測り、問ごとの差を出す
+
+  --eval を省くと evals/recall.toml を測る。実際の会話から作った評価
+  セットは手元に置き、--eval で指す。リポジトリへ入れない。
+  --embedding は characters、multilingual、試す埋め込みの名前、埋め込みを
+  動かす道具の対応表にある 配布元/名前 を指せる。+ で並べると両方の道から
+  渡す。省くと既定の埋め込みで測る。結果には出自、添え書き、大きさ、
+  読み込みと一発話の時間が並ぶ。
+
+  yadori evals draft --from PATH [--from PATH] --out FILE [--append]
+      対話する道具の記録から、評価セットの下書きを作る。
+      問は人が確かめるまで測れない。
+      --append は既にある下書きへ、前回の範囲より後に増えた記録の分だけを足す。
+      前回の問と確認は変えない。前回の範囲を持つ下書きにだけ足せる。
+
+  --from は Claude Code の記録のディレクトリ（~/.claude/projects）や Codex の
+  記録のディレクトリ（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す
+  仕組みで前の発話の候補を引き、その発話と候補だけを判定のため手元の
+  共通の優先順で選んだ道具へ渡す。記録元とは別の相手に渡ることがある。
+  選んだ相手は実行時に表示する。返事、時刻、作業場所は渡らず、
+  記録を丸ごと渡すこともない。思い出す仕組みが拾えなかった組は下書きに
+  出ないので手で足す。直近の範囲の組は測れないので足さない。--out は
+  リポジトリの外を指す。--append を付けないときは、既にあるファイルには書かない。"""
 
 
 @final
