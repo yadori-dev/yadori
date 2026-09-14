@@ -32,6 +32,7 @@ class PendingTurn:
     identity_version: int
     context: str
     spoken: Spoken | None = None
+    previous_source: str | None = None
 
 
 @final
@@ -75,9 +76,15 @@ class PendingStore:
                 identity_version=int(str(data["identity_version"])),
                 context=str(data["context"]),
                 spoken=spoken,
+                previous_source=self._optional_source(data.get("previous_source")),
             )
         except (json.JSONDecodeError, KeyError, ValueError, OSError):
             return None
+
+    def _optional_source(self, value: object) -> str | None:
+        if value is not None and not isinstance(value, str):
+            raise ValueError("先行往復の出典が文字列ではない")
+        return value
 
     def save(self, pending: PendingTurn) -> None:
         path = self._pending_path(pending.session_id)
@@ -89,6 +96,7 @@ class PendingStore:
             "recalled_at": pending.recalled_at.isoformat(),
             "identity_version": pending.identity_version,
             "context": pending.context,
+            "previous_source": pending.previous_source,
         }
         if pending.spoken is not None:
             payload["reply"] = pending.spoken.reply

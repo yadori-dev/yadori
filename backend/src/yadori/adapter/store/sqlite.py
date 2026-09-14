@@ -1,6 +1,6 @@
 """手元のファイル一つへ記憶を持つ。
 
-原文とインデックスを別の表に置く。インデックスは原文から作り直せるため、消しても記憶は
+原文とインデックスを別の表に置く。インデックスは原文と保存済みの補完から作り直せるため、消しても記憶は
 失われない。
 """
 
@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding.characters import Closeness
+from yadori.adapter.store.clarification import ClarificationData
 from yadori.domain.memory import (
+    Clarification,
     Dream,
     Dweller,
     Episode,
@@ -27,6 +29,21 @@ from yadori.domain.memory import (
 )
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS clarification (
+    episode_id INTEGER NOT NULL REFERENCES episode(id),
+    revision INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    body TEXT NOT NULL,
+    PRIMARY KEY (episode_id, revision)
+);
+CREATE TABLE IF NOT EXISTS clarification_index (
+    episode_id INTEGER NOT NULL,
+    revision INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    vector TEXT NOT NULL,
+    PRIMARY KEY (episode_id, revision, model),
+    FOREIGN KEY (episode_id, revision) REFERENCES clarification(episode_id, revision)
+);
 CREATE TABLE IF NOT EXISTS dweller (
     id TEXT PRIMARY KEY,
     owner TEXT NOT NULL,
@@ -172,6 +189,9 @@ class SqliteMemories:
             _ = self._connection.execute("ALTER TABLE episode ADD COLUMN recalled_at TEXT")
         if "source" not in columns:
             _ = self._connection.execute("ALTER TABLE episode ADD COLUMN source TEXT")
+        for column in ("session_id", "previous_source"):
+            if column not in columns:
+                _ = self._connection.execute(f"ALTER TABLE episode ADD COLUMN {column} TEXT")
         _ = self._connection.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS episode_source"
             + " ON episode (dweller_id, source) WHERE source IS NOT NULL"
@@ -283,11 +303,14 @@ class SqliteMemories:
         happened_at: datetime,
         recalled_at: datetime | None = None,
         source: str | None = None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         cursor = self._connection.execute(
             "INSERT INTO episode"
-            + " (dweller_id, utterance, reply, identity_version, happened_at, recalled_at, source)"
-            + " VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING *",
+            + " (dweller_id, utterance, reply, identity_version, happened_at, recalled_at,"
+            + " source, session_id, previous_source)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING *",
             (
                 dweller_id,
                 utterance,
@@ -296,6 +319,8 @@ class SqliteMemories:
                 happened_at.isoformat(),
                 None if recalled_at is None else recalled_at.isoformat(),
                 source,
+                session_id,
+                previous_source,
             ),
         )
         inserted: sqlite3.Row | None = cursor.fetchone()  # pyright: ignore[reportAny]
@@ -314,6 +339,8 @@ class SqliteMemories:
             or kept.reply != reply
             or kept.identity_version != identity_version
             or kept.recalled_at != recalled_at
+            or kept.session_id != session_id
+            or kept.previous_source != previous_source
         ):
             raise RememberingConflict(f"同じ出典へ異なる一往復が届いた: {source}")
         return kept
@@ -336,6 +363,8 @@ class SqliteMemories:
         source: str | None,
         indexes: Collection[tuple[str, Vector]],
         moved: Moved | None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         """一往復と気持ちを同じ取引で確定し、索引は後から補える。"""
         _ = self._connection.execute("BEGIN IMMEDIATE")
@@ -349,6 +378,8 @@ class SqliteMemories:
                 happened_at,
                 recalled_at,
                 source,
+                session_id,
+                previous_source,
             )
             if existing is not None:
                 self._require_same_moved(dweller_id, episode.id, moved)
@@ -388,6 +419,101 @@ class SqliteMemories:
         ):
             raise RememberingConflict(f"同じ一往復へ異なる気持ちの動きが届いた: {episode_id}")
 
+    def episode_from_source(self, dweller_id: str, source: str) -> Episode | None:
+        return self._episode_from_source(dweller_id, source)
+
+    def unclarified(self, dweller_id: str, revision: int, limit: int) -> tuple[Episode, ...]:
+        rows = self._all(
+            "SELECT e.* FROM episode e LEFT JOIN clarification c"
+            + " ON c.episode_id=e.id AND c.revision=?"
+            + " WHERE e.dweller_id=? AND c.episode_id IS NULL ORDER BY e.id",
+            (revision, dweller_id),
+        )
+        return tuple(
+            self._as_episode(row) for row in rows if len(row.text("utterance").strip()) <= 20
+        )[:limit]
+
+    def clarification(self, episode_id: int, revision: int) -> Clarification | None:
+        row = self._one(
+            "SELECT body FROM clarification WHERE episode_id=? AND revision=?",
+            (episode_id, revision),
+        )
+        return None if row is None else ClarificationData.load(row.text("body"))
+
+    def keep_clarification(
+        self, clarification: Clarification, indexes: Collection[tuple[str, Vector]]
+    ) -> None:
+        if clarification.status == "clarified" and not indexes:
+            raise ValueError("説明と索引が揃うまで補完を確定できない")
+        _ = self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.clarification(clarification.episode_id, clarification.revision)
+            if existing is None:
+                self._run(
+                    "INSERT INTO clarification VALUES (?, ?, ?, ?)",
+                    (
+                        clarification.episode_id,
+                        clarification.revision,
+                        clarification.status,
+                        ClarificationData.dump(clarification),
+                    ),
+                )
+                for model, vector in indexes:
+                    self.write_clarification_index(
+                        clarification.episode_id, clarification.revision, model, vector
+                    )
+        except BaseException:
+            _ = self._connection.execute("ROLLBACK")
+            raise
+        _ = self._connection.execute("COMMIT")
+
+    def write_clarification_index(
+        self, episode_id: int, revision: int, model: str, vector: Vector
+    ) -> None:
+        self._run(
+            "INSERT OR REPLACE INTO clarification_index VALUES (?, ?, ?, ?)",
+            (episode_id, revision, model, self._as_text(vector)),
+        )
+
+    def clarifications_without_index(
+        self, dweller_id: str, model: str, revision: int
+    ) -> tuple[Clarification, ...]:
+        rows = self._all(
+            "SELECT c.body FROM clarification c JOIN episode e ON e.id=c.episode_id"
+            + " LEFT JOIN clarification_index i ON i.episode_id=c.episode_id"
+            + " AND i.revision=c.revision AND i.model=?"
+            + " WHERE e.dweller_id=? AND c.revision=? AND c.status='clarified'"
+            + " AND i.episode_id IS NULL ORDER BY e.id",
+            (model, dweller_id, revision),
+        )
+        return tuple(ClarificationData.load(row.text("body")) for row in rows)
+
+    def search_clarifications(
+        self,
+        dweller_id: str,
+        model: str,
+        vector: Vector,
+        limit: int,
+        floor: float,
+        exclude: Collection[int],
+        revision: int,
+    ) -> tuple[tuple[Episode, float], ...]:
+        rows = self._all(
+            "SELECT e.*, i.vector FROM episode e JOIN clarification_index i"
+            + " ON i.episode_id=e.id JOIN clarification c"
+            + " ON c.episode_id=i.episode_id AND c.revision=i.revision"
+            + " WHERE e.dweller_id=? AND i.model=? AND i.revision=? AND c.status='clarified'",
+            (dweller_id, model, revision),
+        )
+        scored = [
+            (self._as_episode(row), self._closeness.between(vector, self._as_vector(row)))
+            for row in rows
+            if row.number("id") not in exclude
+        ]
+        near = [pair for pair in scored if pair[1] >= floor]
+        near.sort(key=lambda pair: (-pair[1], -pair[0].id))
+        return tuple(near[:limit])
+
     def count_episodes(self, dweller_id: str) -> int:
         row = self._one("SELECT COUNT(*) AS total FROM episode WHERE dweller_id = ?", (dweller_id,))
         return 0 if row is None else row.number("total")
@@ -399,6 +525,11 @@ class SqliteMemories:
         )
 
     def clear_index(self, dweller_id: str) -> None:
+        self._run(
+            "DELETE FROM clarification_index WHERE episode_id IN"
+            + " (SELECT id FROM episode WHERE dweller_id = ?)",
+            (dweller_id,),
+        )
         self._run(
             "DELETE FROM episode_index WHERE episode_id IN"
             + " (SELECT id FROM episode WHERE dweller_id = ?)",
@@ -577,6 +708,8 @@ class SqliteMemories:
             happened_at=datetime.fromisoformat(row.text("happened_at")),
             recalled_at=None if recalled is None else datetime.fromisoformat(recalled),
             source=row.text_or_none("source"),
+            session_id=row.text_or_none("session_id"),
+            previous_source=row.text_or_none("previous_source"),
         )
 
     def _as_text(self, vector: Vector) -> str:

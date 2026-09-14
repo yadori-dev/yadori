@@ -10,6 +10,7 @@ import zlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Literal
 
 Vector = tuple[float, ...]
 
@@ -105,6 +106,38 @@ class Episode:
     happened_at: datetime
     recalled_at: datetime | None = None
     source: str | None = None
+    session_id: str | None = None
+    previous_source: str | None = None
+
+
+@dataclass(frozen=True)
+class Clarification:
+    """短い返答の対象を説明する別の記録。推定は原文と区別する。"""
+
+    episode_id: int
+    revision: int
+    status: Literal["clarified", "deferred", "unneeded"]
+    kind: Literal["approval", "denial", "continuation", "selection"] | None
+    text: str | None
+    reason: str
+    made_at: datetime
+    sources: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if self.revision < 1 or not self.reason.strip():
+            raise ValueError("補完には規則の版と理由が必要")
+        if self.status == "clarified":
+            if not self.text or not self.text.strip() or self.kind is None or not self.sources:
+                raise ValueError("補完には説明・応答種別・根拠が必要")
+        elif self.text is not None or self.kind is not None:
+            raise ValueError("保留と対象外には説明を付けない")
+        if self.episode_id in self.sources or len(set(self.sources)) != len(self.sources):
+            raise ValueError("補完の根拠は対象以外の重複しない往復")
+
+    def searchable(self, episode: Episode) -> str:
+        if self.episode_id != episode.id or self.text is None:
+            raise ValueError("補完の対象が違うか説明が無い")
+        return f"{self.text}\n原文: {episode.utterance}"
 
 
 @dataclass(frozen=True)
@@ -130,6 +163,8 @@ class Found:
     relevance: float
     retrieval: Retrieval
     way: str
+    clarification: Clarification | None = None
+    evidence: tuple[Episode, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,6 +191,9 @@ class HowToRecall:
     recent_turns: int = 6
     found_limit: int = 5
     relevance_floor: float = 0.85
+    # 説明文は原文と点数の分布が異なる。最初の架空7問で0.85は混入を増やしたため、
+    # 補完だけ0.90を検証候補とする。原文側の条件は変えない（INC-080）。
+    clarification_floor: float = 0.90
 
 
 # 気持ちが薄れる半減期。測っていない仮置きで、実際に使って直す（未決事項「気持ちが薄れる速さ」）。

@@ -31,6 +31,11 @@ class AgyMemory:
         self._startup = startup or Startup(home)
         self._words = AgyWords()
 
+    def _optional_source(self, value: object) -> str | None:
+        if value is not None and not isinstance(value, str):
+            raise ValueError("会話の所属または出典が文字列ではない")
+        return value
+
     def prepare(self) -> Path:
         settings = self._files.read()
         memories = SqliteMemories(settings.memories_path)
@@ -60,6 +65,8 @@ class AgyMemory:
                 {
                     "dweller_id": settings.dweller.id,
                     "source": notice.source,
+                    "session_id": f"agy:{notice.conversation_id}",
+                    "previous_source": notice.previous_source,
                     "utterance": notice.utterance,
                     "recalled_at": recalled.recalled_at.isoformat(),
                     "identity_version": recalled.identity.version,
@@ -110,6 +117,8 @@ class AgyMemory:
                 spoken.moved,
                 recalled_at=datetime.fromisoformat(AgyJson.text(record, "recalled_at")),
                 source=AgyJson.text(record, "source"),
+                session_id=self._optional_source(record.get("session_id")),
+                previous_source=self._optional_source(record.get("previous_source")),
                 identity_version=AgyJson.number(record, "identity_version"),
             )
             record["saved"] = True

@@ -14,6 +14,7 @@ from typing import final
 
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import ClaudeSession, ClaudeSessionError, ClaudeWords
+from yadori.adapter.tool.continuity import Continuity
 from yadori.domain.conversation import CannotSpeak, Spoken
 from yadori.domain.memory import EmbeddingsUnavailable, Moved, RememberingConflict
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
@@ -30,6 +31,7 @@ class _Pending:
     identity_version: int
     context: str
     spoken: Spoken | None = None
+    previous_source: str | None = None
 
 
 @final
@@ -76,6 +78,7 @@ class ClaudeHook:
         self._event = event
         self._settings_file = SettingsFile(home)
         self._run_dir = run_dir
+        self._continuity = Continuity(run_dir)
         self._words = ClaudeWords()
         self._startup = startup or Startup(home)
 
@@ -122,6 +125,7 @@ class ClaudeHook:
                 print(f"前の一往復を覚えられません: {trouble}", file=sys.stderr)
                 return 2
         self._discard(session_id)
+        previous = self._continuity.begin(session_id, f"claude:{prompt_id}")
         settings, memories, conversation = self._conversation()
         try:
             recollection = conversation.recall(settings.dweller.id, utterance)
@@ -134,6 +138,7 @@ class ClaudeHook:
                     recollection.recalled_at,
                     recollection.identity.version,
                     context,
+                    previous_source=previous,
                 )
             )
         finally:
@@ -163,6 +168,7 @@ class ClaudeHook:
                 pending.identity_version,
                 pending.context,
                 spoken,
+                pending.previous_source,
             )
             self._write_pending(pending)
             self._remember(pending)
@@ -180,6 +186,7 @@ class ClaudeHook:
         return 0
 
     def _stop_failure(self, payload: dict[str, object]) -> int:
+        self._continuity.interrupt(self._identifier(payload, "session_id"))
         self._discard(self._identifier(payload, "session_id"))
         return 0
 
@@ -207,7 +214,10 @@ class ClaudeHook:
                 recalled_at=pending.recalled_at,
                 source=f"claude:{pending.prompt_id}",
                 identity_version=pending.identity_version,
+                session_id=f"claude:{pending.session_id}",
+                previous_source=pending.previous_source,
             )
+            self._continuity.finish(pending.session_id, f"claude:{pending.prompt_id}")
         finally:
             memories.close()
 
@@ -239,6 +249,7 @@ class ClaudeHook:
             "recalled_at": pending.recalled_at.isoformat(),
             "identity_version": pending.identity_version,
             "context": pending.context,
+            "previous_source": pending.previous_source,
         }
         if pending.spoken is not None:
             value["reply"] = pending.spoken.reply
@@ -272,7 +283,13 @@ class ClaudeHook:
             version,
             self._text(value, "context"),
             spoken,
+            self._optional_source(value.get("previous_source")),
         )
+
+    def _optional_source(self, value: object) -> str | None:
+        if value is not None and not isinstance(value, str):
+            raise ValueError("先行往復の出典が文字列ではない")
+        return value
 
     def _discard(self, session_id: str) -> None:
         self._pending_path(session_id).unlink(missing_ok=True)

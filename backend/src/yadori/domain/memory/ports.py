@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Protocol
 
 from yadori.domain.memory.model import (
+    Clarification,
     Dream,
     Dweller,
     Episode,
@@ -49,7 +50,7 @@ class RememberingConflict(Exception):
 class Memories(Protocol):
     """宿りの記憶の保存先。
 
-    原文とインデックスは別々に扱う。インデックスは原文から作り直せる派生物である。
+    原文とインデックスは別々に扱う。インデックスは原文と保存済みの補完から作り直せる派生物である。
     """
 
     def settle(self, dweller: Dweller) -> None: ...
@@ -83,6 +84,8 @@ class Memories(Protocol):
         happened_at: datetime,
         recalled_at: datetime | None = None,
         source: str | None = None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode: ...
 
     def keep_episode(
@@ -96,9 +99,40 @@ class Memories(Protocol):
         source: str | None,
         indexes: Collection[tuple[str, Vector]],
         moved: Moved | None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         """一往復と気持ちを一件で残し、作れる索引を添える。"""
         ...
+
+    def episode_from_source(self, dweller_id: str, source: str) -> Episode | None: ...
+
+    def unclarified(self, dweller_id: str, revision: int, limit: int) -> tuple[Episode, ...]: ...
+
+    def clarification(self, episode_id: int, revision: int) -> Clarification | None: ...
+
+    def keep_clarification(
+        self, clarification: Clarification, indexes: Collection[tuple[str, Vector]]
+    ) -> None: ...
+
+    def search_clarifications(
+        self,
+        dweller_id: str,
+        model: str,
+        vector: Vector,
+        limit: int,
+        floor: float,
+        exclude: Collection[int],
+        revision: int,
+    ) -> tuple[tuple[Episode, float], ...]: ...
+
+    def clarifications_without_index(
+        self, dweller_id: str, model: str, revision: int
+    ) -> tuple[Clarification, ...]: ...
+
+    def write_clarification_index(
+        self, episode_id: int, revision: int, model: str, vector: Vector
+    ) -> None: ...
 
     def count_episodes(self, dweller_id: str) -> int: ...
 

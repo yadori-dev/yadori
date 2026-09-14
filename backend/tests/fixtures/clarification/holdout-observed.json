@@ -1,0 +1,156 @@
+[
+  {
+    "name": "receipts",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、領収書を月ごとのフォルダに保存する形を承認した。",
+    "reason": "「その形」は直前に提示された領収書の保存方法を一意に指すため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、領収書を月ごとのフォルダに保存する形を承認した。\",\"reason\":\"「その形」は直前に提示された領収書の保存方法を一意に指すため。\",\"sources\":[1]}",
+    "seconds": 8.281498945999829,
+    "model": "codex:default"
+  },
+  {
+    "name": "invoices",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、請求書を取引先ごとのフォルダに分けることを承認した。",
+    "reason": "「その形」は直前に提案された請求書のフォルダ分けを一意に指す。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、請求書を取引先ごとのフォルダに分けることを承認した。\",\"reason\":\"「その形」は直前に提案された請求書のフォルダ分けを一意に指す。\",\"sources\":[1]}",
+    "seconds": 7.058841116000167,
+    "model": "codex:default"
+  },
+  {
+    "name": "video",
+    "status": "clarified",
+    "kind": "denial",
+    "text": "ユーザーは、研修動画を社外へ公開することを拒否した。",
+    "reason": "直前の問いから、拒否の対象が研修動画の社外公開と一意に特定できるため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"denial\",\"text\":\"ユーザーは、研修動画を社外へ公開することを拒否した。\",\"reason\":\"直前の問いから、拒否の対象が研修動画の社外公開と一意に特定できるため。\",\"sources\":[1]}",
+    "seconds": 7.691340547999971,
+    "model": "codex:default"
+  },
+  {
+    "name": "resume",
+    "status": "clarified",
+    "kind": "continuation",
+    "text": "ユーザーは、接続設定の説明を再開して続けるよう求めた。",
+    "reason": "直前の再開提案により、続ける対象が接続設定の説明と一意に特定できる。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"continuation\",\"text\":\"ユーザーは、接続設定の説明を再開して続けるよう求めた。\",\"reason\":\"直前の再開提案により、続ける対象が接続設定の説明と一意に特定できる。\",\"sources\":[1]}",
+    "seconds": 6.944827125999836,
+    "model": "codex:default"
+  },
+  {
+    "name": "format",
+    "status": "clarified",
+    "kind": "selection",
+    "text": "ユーザーは配布資料の形式としてPDFを選んだ。",
+    "reason": "直前に配布資料をPDFとWordのどちらにするか尋ねられており、選択対象が一意に特定できるため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"selection\",\"text\":\"ユーザーは配布資料の形式としてPDFを選んだ。\",\"reason\":\"直前に配布資料をPDFとWordのどちらにするか尋ねられており、選択対象が一意に特定できるため。\",\"sources\":[1]}",
+    "seconds": 6.973676331000206,
+    "model": "codex:default"
+  },
+  {
+    "name": "maildraft",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは案内メールの下書き作成だけを依頼し、送信は別途確認する範囲で承認した。",
+    "reason": "直前の提案から下書きの対象が案内メールと一意に特定できる。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは案内メールの下書き作成だけを依頼し、送信は別途確認する範囲で承認した。\",\"reason\":\"直前の提案から下書きの対象が案内メールと一意に特定できる。\",\"sources\":[1]}",
+    "seconds": 8.920836258000236,
+    "model": "codex:default"
+  },
+  {
+    "name": "once",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、画像を圧縮することを今回だけに限って承認した。",
+    "reason": "直前の画像圧縮の提案が返答の対象として一意に特定でき、今回だけという制限も明示されている。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、画像を圧縮することを今回だけに限って承認した。\",\"reason\":\"直前の画像圧縮の提案が返答の対象として一意に特定でき、今回だけという制限も明示されている。\",\"sources\":[1]}",
+    "seconds": 7.663208154999666,
+    "model": "codex:default"
+  },
+  {
+    "name": "inventory",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、在庫一覧を毎週金曜日に更新する方針で進めることを承認した。",
+    "reason": "「それ」が指す対象は、直前に提示された在庫一覧を毎週金曜日に更新する方針に一意に特定できる。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、在庫一覧を毎週金曜日に更新する方針で進めることを承認した。\",\"reason\":\"「それ」が指す対象は、直前に提示された在庫一覧を毎週金曜日に更新する方針に一意に特定できる。\",\"sources\":[1]}",
+    "seconds": 7.695441146000121,
+    "model": "codex:default"
+  },
+  {
+    "name": "unknownformat",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "「わかりました」は曖昧な相槌であり、PDFとWordのどちらを選んだのか特定できません。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"「わかりました」は曖昧な相槌であり、PDFとWordのどちらを選んだのか特定できません。\",\"sources\":[1]}",
+    "seconds": 8.492045306999898,
+    "model": "codex:default"
+  },
+  {
+    "name": "weather",
+    "status": "unneeded",
+    "kind": null,
+    "text": null,
+    "reason": "「今日は雨です」は先行文脈なしでも意味が通る発話のため。",
+    "sources": [],
+    "raw": "{\"status\":\"unneeded\",\"kind\":null,\"text\":null,\"reason\":\"「今日は雨です」は先行文脈なしでも意味が通る発話のため。\",\"sources\":[]}",
+    "seconds": 7.321535839000262,
+    "model": "codex:default"
+  },
+  {
+    "name": "twowork",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "直前に住所の更新と口座の変更の二つが提示されており、「それだけ」が両方を指すのか一方を指すのか一意に特定できません。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"直前に住所の更新と口座の変更の二つが提示されており、「それだけ」が両方を指すのか一方を指すのか一意に特定できません。\",\"sources\":[1]}",
+    "seconds": 7.313252449000174,
+    "model": "codex:default"
+  },
+  {
+    "name": "unrelated",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "「ふーん」は曖昧な相槌であり、料金プランの見直しへの承認・否定などを特定できないため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"「ふーん」は曖昧な相槌であり、料金プランの見直しへの承認・否定などを特定できないため。\",\"sources\":[1]}",
+    "seconds": 7.367017494000265,
+    "model": "codex:default"
+  }
+]
