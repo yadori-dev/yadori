@@ -1,11 +1,16 @@
 [project]
 name = "yadori"
 dynamic = ["version"]
-description = "続く記憶と気持ちを持ち、話しかけられていない間も動く常駐プログラム"
+description = "Claude Code・Codex・agyで会話の記憶と名乗りを引き継ぐツール"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "discord-py>=2.4,<3",
     "fastembed>=0.8.0,<0.9",
+    "mcp>=2.2,<3",
+    "tomlkit>=0.13,<1",
 ]
 
 [project.scripts]

@@ -27,7 +27,7 @@ sudo apt update
 sudo apt install yadori
 ```
 
-[README の設定](../../README.md#動かす)を作り、一般ユーザーで `yadori state` を実行すると状態を読めます。会話には Claude Code または Codex の別途導入とログインが必要です。パッケージの導入だけではログインや常駐起動を行いません。
+[README の設定](../../README.md#最初の会話)を作り、一般ユーザーで `yadori state` を実行すると状態を読めます。会話には Claude Code・Codex・agyのいずれかの別途導入とログインが必要です。パッケージの導入だけではログインや常駐起動を行いません。
 
 ```bash
 sudo apt update

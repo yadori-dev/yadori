@@ -474,7 +474,7 @@ class TestIT030006:
         assert not (tmp_path / "zero.toml").exists()
         assert no_out == 1 and unknown == 1
         assert USAGE in errors.getvalue()
-        assert "別の相手へ渡ることになる" in USAGE
+        assert "別の相手に渡ることがある" in USAGE
 
 
 @final

@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from typing import final
 
+from yadori.adapter.recall.connection import RecallGuidance
+from yadori.adapter.recall.ledger import RecallLedger
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import (
     CodexSession,
@@ -16,8 +18,10 @@ from yadori.adapter.tool import (
     PendingStore,
     PendingTurn,
 )
+from yadori.adapter.tool.continuity import Continuity
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import EmbeddingsUnavailable, RememberingConflict
+from yadori.domain.recall.model import RecallFailure
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation
@@ -67,6 +71,7 @@ class CodexHook:
         self._event = event.lower().replace("_", "-")
         self._settings_file = SettingsFile(home)
         self._run_dir = run_dir
+        self._continuity = Continuity(run_dir)
         self._words = CodexWords()
         self._pending_store = PendingStore(run_dir)
         self._startup = startup or Startup(home)
@@ -90,6 +95,7 @@ class CodexHook:
             CannotSpeak,
             RememberingConflict,
             RuntimeError,
+            RecallFailure,
             sqlite3.Error,
             NotSettled,
             EmbeddingsUnavailable,
@@ -114,10 +120,18 @@ class CodexHook:
                 print(f"前の一往復を覚えられません: {trouble}", file=sys.stderr)
                 return 2
         self._pending_store.discard(session_id)
+        previous = self._continuity.begin(session_id, f"codex:{turn_id}")
         settings, memories, conversation = self._conversation()
         try:
             recollection = conversation.recall(settings.dweller.id, utterance)
-            context = self._words.hook_response(recollection)
+            turn = RecallLedger(self._run_dir, settings.dweller.id).begin(
+                f"{session_id}:{turn_id}",
+                [one.id for one in recollection.recent]
+                + [one.episode.id for one in recollection.found],
+            )
+            context = self._words.hook_response(
+                recollection, instructions=RecallGuidance.for_turn(turn)
+            )
             self._pending_store.save(
                 PendingTurn(
                     session_id,
@@ -126,6 +140,7 @@ class CodexHook:
                     recollection.recalled_at,
                     recollection.identity.version,
                     context,
+                    previous_source=previous,
                 )
             )
         finally:
@@ -159,9 +174,11 @@ class CodexHook:
                 pending.identity_version,
                 pending.context,
                 spoken,
+                pending.previous_source,
             )
             self._pending_store.save(pending)
             self._remember(pending)
+            self._end_recall(session_id, turn_id)
         except (CannotSpeak, RememberingConflict, RuntimeError, sqlite3.Error) as trouble:
             return self._block(f"宿りがこの一往復を覚えられませんでした: {trouble}")
         try:
@@ -174,6 +191,10 @@ class CodexHook:
     def _interrupt(self, payload: dict[str, object]) -> int:
         session_id = str(payload.get("session_id", ""))
         if session_id:
+            pending = self._pending_store.read(session_id)
+            if pending is not None:
+                self._end_recall(session_id, pending.turn_id)
+            self._continuity.interrupt(session_id)
             self._pending_store.discard(session_id)
         return 0
 
@@ -195,6 +216,10 @@ class CodexHook:
         print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
         return 0
 
+    def _end_recall(self, session_id: str, turn_id: str) -> None:
+        settings = self._settings_file.read()
+        RecallLedger(self._run_dir, settings.dweller.id).end(f"{session_id}:{turn_id}")
+
     def _remember(self, pending: PendingTurn) -> None:
         if pending.spoken is None:
             return
@@ -208,12 +233,16 @@ class CodexHook:
                 recalled_at=pending.recalled_at,
                 source=f"codex:{pending.turn_id}",
                 identity_version=pending.identity_version,
+                session_id=f"codex:{pending.session_id}",
+                previous_source=pending.previous_source,
             )
+            self._continuity.finish(pending.session_id, f"codex:{pending.turn_id}")
         finally:
             memories.close()
 
     def _conversation(self) -> tuple[Settings, SqliteMemories, Conversation]:
         settings = self._settings_file.read()
+        _ = RecallLedger(self._run_dir, settings.dweller.id)
         memories = SqliteMemories(settings.memories_path)
         try:
             self._startup.settle(memories, settings)

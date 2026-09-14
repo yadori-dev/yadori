@@ -15,6 +15,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import IO, ClassVar, final
 
+from yadori.adapter.recall.connection import NAME, MemoryConnection, MemoryConnectionError
+
 
 class ClaudeSessionError(Exception):
     """安全に Claude Code を起こせない。理由と直し方を持つ。"""
@@ -108,13 +110,22 @@ class ClaudeSession:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
             settings, project = self._borrowed(run_dir)
+            MemoryConnection.claude_permissions(settings)
             self._write_json(run_dir / "settings.json", settings)
-            self._write_json(run_dir / ".claude.json", {"projects": project})
+            state = self._json_object(self._state, missing_ok=True)
+            copied: dict[str, object] = {}
+            if isinstance(state.get("hasCompletedOnboarding"), bool):
+                copied["hasCompletedOnboarding"] = state["hasCompletedOnboarding"]
+            for key in ("lastOnboardingVersion", "theme"):
+                if isinstance(state.get(key), str):
+                    copied[key] = state[key]
+            copied["projects"] = project
+            self._write_json(run_dir / ".claude.json", copied)
             required = self._required_settings(run_dir)
             required_path = run_dir / "yadori-settings.json"
             self._write_json(required_path, required)
             mcp_path = run_dir / "mcp.json"
-            self._write_json(mcp_path, self._mcp())
+            self._write_json(mcp_path, self._mcp(run_dir))
             credential = self._link_credential(run_dir)
             environment = self._child_environment(run_dir)
             argv = (
@@ -128,9 +139,11 @@ class ClaudeSession:
                 "--strict-mcp-config",
             )
             return PreparedClaude(run_dir, argv, environment, lock, credential)
-        except BaseException:
+        except BaseException as trouble:
             lock.close()
             shutil.rmtree(run_dir, ignore_errors=True)
+            if isinstance(trouble, MemoryConnectionError):
+                raise ClaudeSessionError(str(trouble)) from trouble
             raise
 
     def finish(self, prepared: PreparedClaude) -> None:
@@ -258,16 +271,25 @@ class ClaudeSession:
         shared = trust_root / ".claude" / "settings.local.json"
         return (shared,) if current == shared else (current, shared)
 
-    def _mcp(self) -> dict[str, object]:
+    def _mcp(self, run_dir: Path) -> dict[str, object]:
         state = self._json_object(self._state, missing_ok=True)
         root = self._workspace_root()
         project_state = self._project_state(state, self._trust_root(root))
         disabled_regular = set(self._strings(project_state.get("disabledMcpServers")))
+        if NAME in disabled_regular or NAME in self._strings(
+            project_state.get("disabledMcpjsonServers")
+        ):
+            raise MemoryConnectionError(
+                "記憶サーバーyadori_memoryが無効化されています。既存の指定を確認してください"
+            )
         servers: dict[str, object] = {}
+        MemoryConnection.check_name(state.get("mcpServers"))
         self._add_mcp(servers, state.get("mcpServers"), "利用者", disabled_regular)
         local_servers = project_state.get("mcpServers")
+        MemoryConnection.check_name(local_servers)
         project_file = self._json_object(root / ".mcp.json", missing_ok=True)
         declared = self._mapping(project_file.get("mcpServers"))
+        MemoryConnection.check_name(declared)
         if "mcpServers" in project_file and declared is None:
             raise ClaudeSessionError("作業場所の MCP 設定の形が違います")
         if declared is not None:
@@ -287,6 +309,7 @@ class ClaudeSession:
             chosen = {name: value for name, value in declared.items() if name in enabled}
             self._add_mcp(servers, chosen, "作業場所", disabled_regular)
         self._add_mcp(servers, local_servers, "手元だけ", disabled_regular)
+        servers[NAME] = MemoryConnection.command(run_dir, self._home, self._environment)
         return {"mcpServers": servers}
 
     def _add_mcp(

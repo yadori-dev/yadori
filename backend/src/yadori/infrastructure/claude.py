@@ -12,10 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import final
 
+from yadori.adapter.recall.connection import RecallGuidance
+from yadori.adapter.recall.ledger import RecallLedger
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import ClaudeSession, ClaudeSessionError, ClaudeWords
+from yadori.adapter.tool.continuity import Continuity
 from yadori.domain.conversation import CannotSpeak, Spoken
 from yadori.domain.memory import EmbeddingsUnavailable, Moved, RememberingConflict
+from yadori.domain.recall.model import RecallFailure
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.usecase.conversation import Conversation
@@ -30,6 +34,7 @@ class _Pending:
     identity_version: int
     context: str
     spoken: Spoken | None = None
+    previous_source: str | None = None
 
 
 @final
@@ -76,6 +81,7 @@ class ClaudeHook:
         self._event = event
         self._settings_file = SettingsFile(home)
         self._run_dir = run_dir
+        self._continuity = Continuity(run_dir)
         self._words = ClaudeWords()
         self._startup = startup or Startup(home)
 
@@ -98,6 +104,7 @@ class ClaudeHook:
             CannotSpeak,
             RememberingConflict,
             RuntimeError,
+            RecallFailure,
             sqlite3.Error,
             NotSettled,
             EmbeddingsUnavailable,
@@ -122,10 +129,18 @@ class ClaudeHook:
                 print(f"前の一往復を覚えられません: {trouble}", file=sys.stderr)
                 return 2
         self._discard(session_id)
+        previous = self._continuity.begin(session_id, f"claude:{prompt_id}")
         settings, memories, conversation = self._conversation()
         try:
             recollection = conversation.recall(settings.dweller.id, utterance)
-            context = self._words.hook_response(recollection)
+            turn = RecallLedger(self._run_dir, settings.dweller.id).begin(
+                f"{session_id}:{prompt_id}",
+                [one.id for one in recollection.recent]
+                + [one.episode.id for one in recollection.found],
+            )
+            context = self._words.hook_response(
+                recollection, instructions=RecallGuidance.for_turn(turn)
+            )
             self._write_pending(
                 _Pending(
                     session_id,
@@ -134,6 +149,7 @@ class ClaudeHook:
                     recollection.recalled_at,
                     recollection.identity.version,
                     context,
+                    previous_source=previous,
                 )
             )
         finally:
@@ -163,9 +179,11 @@ class ClaudeHook:
                 pending.identity_version,
                 pending.context,
                 spoken,
+                pending.previous_source,
             )
             self._write_pending(pending)
             self._remember(pending)
+            self._end_recall(session_id, prompt_id)
         except (CannotSpeak, RememberingConflict, RuntimeError, sqlite3.Error) as trouble:
             return self._block(f"宿りがこの一往復を覚えられませんでした: {trouble}")
         try:
@@ -180,6 +198,11 @@ class ClaudeHook:
         return 0
 
     def _stop_failure(self, payload: dict[str, object]) -> int:
+        session_id = self._identifier(payload, "session_id")
+        pending = self._read_pending(session_id)
+        if pending is not None:
+            self._end_recall(session_id, pending.prompt_id)
+        self._continuity.interrupt(session_id)
         self._discard(self._identifier(payload, "session_id"))
         return 0
 
@@ -191,8 +214,14 @@ class ClaudeHook:
                 self._remember(pending)
             except (CannotSpeak, RememberingConflict, RuntimeError, sqlite3.Error) as trouble:
                 print(f"終了時に一往復を覚えられませんでした: {trouble}", file=sys.stderr)
+        if pending is not None:
+            self._end_recall(session_id, pending.prompt_id)
         self._discard(session_id)
         return 0
+
+    def _end_recall(self, session_id: str, turn_id: str) -> None:
+        settings = self._settings_file.read()
+        RecallLedger(self._run_dir, settings.dweller.id).end(f"{session_id}:{turn_id}")
 
     def _remember(self, pending: _Pending) -> None:
         if pending.spoken is None:
@@ -207,12 +236,16 @@ class ClaudeHook:
                 recalled_at=pending.recalled_at,
                 source=f"claude:{pending.prompt_id}",
                 identity_version=pending.identity_version,
+                session_id=f"claude:{pending.session_id}",
+                previous_source=pending.previous_source,
             )
+            self._continuity.finish(pending.session_id, f"claude:{pending.prompt_id}")
         finally:
             memories.close()
 
     def _conversation(self) -> tuple[Settings, SqliteMemories, Conversation]:
         settings = self._settings_file.read()
+        _ = RecallLedger(self._run_dir, settings.dweller.id)
         memories = SqliteMemories(settings.memories_path)
         try:
             self._startup.settle(memories, settings)
@@ -239,6 +272,7 @@ class ClaudeHook:
             "recalled_at": pending.recalled_at.isoformat(),
             "identity_version": pending.identity_version,
             "context": pending.context,
+            "previous_source": pending.previous_source,
         }
         if pending.spoken is not None:
             value["reply"] = pending.spoken.reply
@@ -272,7 +306,13 @@ class ClaudeHook:
             version,
             self._text(value, "context"),
             spoken,
+            self._optional_source(value.get("previous_source")),
         )
+
+    def _optional_source(self, value: object) -> str | None:
+        if value is not None and not isinstance(value, str):
+            raise ValueError("先行往復の出典が文字列ではない")
+        return value
 
     def _discard(self, session_id: str) -> None:
         self._pending_path(session_id).unlink(missing_ok=True)

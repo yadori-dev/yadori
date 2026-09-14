@@ -13,6 +13,9 @@ from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from typing import final
 
+from yadori.domain.dream.clarification import REVISION
+from yadori.domain.importing.model import ExternalFound
+from yadori.domain.importing.ports import Archive
 from yadori.domain.memory import (
     Dreamed,
     Embeddings,
@@ -28,6 +31,7 @@ from yadori.domain.memory import (
     State,
     Vector,
 )
+from yadori.usecase.importing.searching import Searching
 
 
 @final
@@ -40,7 +44,9 @@ class Conversation:
         embeddings: Embeddings | Sequence[Embeddings],
         now: Callable[[], datetime],
         how: HowToRecall | None = None,
+        archive: Archive | None = None,
     ) -> None:
+        self._archive = archive
         self._memories: Memories = memories
         self._ways: tuple[Embeddings, ...] = (
             tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
@@ -64,7 +70,11 @@ class Conversation:
         recalled_at = self._now()
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
-        found = self._found_beyond(dweller_id, utterance, recent)
+        candidates = Searching(self._memories, self._archive, self._how).find(
+            self._ways, dweller_id, utterance, [one.id for one in recent]
+        )
+        found = tuple(one for one in candidates if isinstance(one, Found))
+        external = tuple(one for one in candidates if isinstance(one, ExternalFound))
         state = self.state(dweller_id, recalled_at)
         dream = self._dreamed(dweller_id)
         self._record_retrieval(found, recalled_at)
@@ -75,6 +85,7 @@ class Conversation:
             state=state,
             dream=dream,
             recalled_at=recalled_at,
+            external=external,
         )
 
     def remember(
@@ -87,6 +98,8 @@ class Conversation:
         recalled_at: datetime | None = None,
         source: str | None = None,
         identity_version: int | None = None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         """一度のやりとりを、原文のまま記憶へ加え、気持ちを動かす。
 
@@ -108,6 +121,8 @@ class Conversation:
             source,
             made,
             moved,
+            session_id,
+            previous_source,
         )
 
     def _dreamed(self, dweller_id: str) -> Dreamed | None:
@@ -122,7 +137,7 @@ class Conversation:
         return State.from_shifts(self._memories.shifts(dweller_id), at or self._now())
 
     def rebuild_index(self, dweller_id: str) -> int:
-        """インデックスを原文から作り直す。
+        """インデックスを原文と保存済みの補完から作り直す。
 
         - インデックスを持たない原文を集める
         - 一件ずつインデックスを作る
@@ -134,6 +149,29 @@ class Conversation:
             for episode in self._memories.episodes_without_index(dweller_id, way.name):
                 self._memories.write_index(episode.id, way.name, way.to_remember(episode.utterance))
                 rebuilt += 1
+            for record in self._memories.clarifications_without_index(
+                dweller_id, way.name, REVISION
+            ):
+                episode = self._memories.episode(record.episode_id)
+                if episode is None:
+                    raise RuntimeError("補完の原文が見つからない")
+                self._memories.write_clarification_index(
+                    episode.id,
+                    record.revision,
+                    way.name,
+                    way.to_remember(record.searchable(episode)),
+                )
+                rebuilt += 1
+        if self._archive is not None:
+            for way in self._ways:
+                for record in self._archive.unindexed(dweller_id, way.name):
+                    self._archive.index(
+                        dweller_id,
+                        record.id,
+                        way.name,
+                        way.to_remember(record.conversation.utterance),
+                    )
+                    rebuilt += 1
         return rebuilt
 
     # 思い出す
@@ -160,60 +198,6 @@ class Conversation:
         指す語だけの発話は意味で探しても何も出ないため、この道で渡す。
         """
         return self._memories.recent(dweller_id, self._how.recent_turns)
-
-    def _found_beyond(
-        self, dweller_id: str, utterance: str, recent: Collection[Episode]
-    ) -> tuple[Found, ...]:
-        """直近より前から、意味の近さで探す。
-
-        - 直近で渡すものを除く
-        - 近さと思い出した記録を別の値として持たせる
-
-        同じ記憶が二つの道で現れると、何が効いたのかを読めなくなる。
-        """
-        skip = [episode.id for episode in recent]
-        by_way = [self._by(way, dweller_id, utterance, skip) for way in self._ways]
-        return self._woven(by_way)
-
-    def _by(
-        self, way: Embeddings, dweller_id: str, utterance: str, skip: list[int]
-    ) -> tuple[Found, ...]:
-        """一つの道で探す。"""
-        hits = self._memories.search(
-            dweller_id,
-            way.name,
-            way.to_recall(utterance),
-            self._how.found_limit,
-            self._how.relevance_floor,
-            exclude=skip,
-        )
-        return tuple(
-            self._with_retrieval(episode, relevance, way.name) for episode, relevance in hits
-        )
-
-    def _woven(self, by_way: list[tuple[Found, ...]]) -> tuple[Found, ...]:
-        """道ごとの結果を、順位の高いものから交互に並べる。
-
-        点数を混ぜない。混ぜると、どの道が効いたかを読めなくなる。同じ記憶が
-        二つの道で出たら、先に出たほうだけを渡す。
-        """
-        woven: list[Found] = []
-        seen: set[int] = set()
-        for place in range(self._how.found_limit):
-            for found in by_way:
-                if place < len(found) and found[place].episode.id not in seen:
-                    seen.add(found[place].episode.id)
-                    woven.append(found[place])
-        return tuple(woven[: self._how.found_limit])
-
-    def _with_retrieval(self, episode: Episode, relevance: float, way: str) -> Found:
-        """近さと思い出した記録を、別の値として並べる。一つの点数へ混ぜない。"""
-        return Found(
-            episode=episode,
-            relevance=relevance,
-            retrieval=self._memories.retrieval(episode.id),
-            way=way,
-        )
 
     def _record_retrieval(self, found: Collection[Found], at: datetime) -> None:
         """思い出したことを記録する。思い出しやすさはここから求める。"""

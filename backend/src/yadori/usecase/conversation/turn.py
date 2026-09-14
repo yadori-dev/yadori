@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from typing import final
 
@@ -37,6 +38,8 @@ class Turn:
     def __init__(self, conversation: Conversation, voice: Voice) -> None:
         self._conversation: Conversation = conversation
         self._voice: Voice = voice
+        self._session_id: str = f"turn:{uuid.uuid4().hex}"
+        self._previous: dict[str, str] = {}
 
     def respond_to(self, dweller_id: str, utterance: str) -> Response:
         """話しかけられて、応対して、覚える。
@@ -48,9 +51,12 @@ class Turn:
         応対を作れなければ覚えない。作れなかった往復を覚えると、次に思い出す
         材料が実際には交わしていない会話で埋まる。
         """
+        previous = self._previous.pop(dweller_id, None)
         recollection = self._recall(dweller_id, utterance)
         spoken = self._speak(recollection, utterance)
-        episode = self._remember(dweller_id, utterance, spoken, recollection)
+        episode = self._remember(dweller_id, utterance, spoken, recollection, previous)
+        if episode.source is not None:
+            self._previous[dweller_id] = episode.source
         return Response(
             reply=spoken.reply,
             recollection=recollection,
@@ -76,7 +82,12 @@ class Turn:
         return self._voice.speak(recollection, utterance)
 
     def _remember(
-        self, dweller_id: str, utterance: str, spoken: Spoken, recollection: Recollection
+        self,
+        dweller_id: str,
+        utterance: str,
+        spoken: Spoken,
+        recollection: Recollection,
+        previous: str | None,
     ) -> Episode:
         """交わした一往復を原文のまま記憶へ加え、その往復の動きを積む。"""
         return self._conversation.remember(
@@ -86,4 +97,7 @@ class Turn:
             spoken.moved,
             recalled_at=recollection.recalled_at,
             identity_version=recollection.identity.version,
+            source=f"turn:{uuid.uuid4().hex}",
+            session_id=self._session_id,
+            previous_source=previous,
         )

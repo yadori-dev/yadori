@@ -15,10 +15,10 @@ from typing import TextIO, final
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.evaluation import ClaudeCodeJudge, ClaudeCodeRecords, CodexRecords, DraftFile
 from yadori.adapter.store import InMemoryMemories
-from yadori.adapter.tool import ClaudeCodeCall
 from yadori.domain.evaluation import Appended, CannotDraft, Draft, Judge
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall
-from yadori.infrastructure.settings import DEFAULT_MODEL, SettingsFile
+from yadori.infrastructure.settings import NotSettled, SettingsFile
+from yadori.infrastructure.tools import SelectedCall
 from yadori.usecase.evaluation import DRAFT_HOW, Drafting
 
 # 判定は問いを十ずつ渡すので小さいが、回数が多い。応対と同じ待ち時間で足りる。
@@ -46,10 +46,8 @@ class Drafter:
         self._places: tuple[Path, ...] = tuple(places)
         self._out: Path = out
         self._append: bool = append
-        # 宿りの設定（dweller.toml）が無くても下書きは作れるように、既定のAIモデルで呼ぶ。
-        self._judge: Judge = judge or ClaudeCodeJudge(
-            ClaudeCodeCall(DEFAULT_MODEL, JUDGE_WAIT_SECONDS)
-        )
+        # 人物の名乗りがなくても、共通の道具順で判定できる。
+        self._judge: Judge | None = judge
         # 既定の埋め込みは起動と同じ工場が組む。既定を替えたら下書きも同じ埋め込みで引く。
         # 組むのは run の中。道具が無ければそこで理由を書いて終わるためである。
         self._default: Callable[[Path | None, Announcing | None], Embeddings] = (
@@ -63,7 +61,7 @@ class Drafter:
         try:
             drafting = Drafting(
                 [ClaudeCodeRecords(), CodexRecords()],
-                self._judge,
+                self._judge or ClaudeCodeJudge(SelectedCall("下書きの判定", JUDGE_WAIT_SECONDS)),
                 DraftFile(),
                 self._default(SettingsFile().models_path, print),
                 InMemoryMemories,
@@ -73,7 +71,7 @@ class Drafter:
                 self._appended(drafting.append(self._places, self._out), drafting)
             else:
                 self._drafted(drafting.run(self._places, self._out), drafting)
-        except (CannotDraft, EmbeddingsUnavailable) as reason:
+        except (NotSettled, CannotDraft, EmbeddingsUnavailable) as reason:
             print(f"下書きを作れません: {reason}", file=sys.stderr)
             return 1
         except OSError as trouble:

@@ -11,11 +11,14 @@ import subprocess
 import sys
 import tomllib
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, ClassVar, final
 
+import tomlkit
+
+from yadori.adapter.recall.connection import NAME, MemoryConnection, MemoryConnectionError
 from yadori.adapter.tool.pending_turn import StaleSessionCleaner
 
 
@@ -103,15 +106,20 @@ class CodexSession:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
             settings = self._borrowed(run_dir)
+            settings["mcp_servers"] = {
+                NAME: MemoryConnection.codex(run_dir, self._home, self._environment)
+            }
             self._write_toml(run_dir / "config.toml", settings)
             self._write_hooks(run_dir)
             credential = self._link_credential(run_dir)
             environment = self._child_environment(run_dir)
             argv = (self._executable, "--dangerously-bypass-hook-trust")
             return PreparedCodex(run_dir, argv, environment, lock, credential)
-        except BaseException:
+        except BaseException as trouble:
             lock.close()
             shutil.rmtree(run_dir, ignore_errors=True)
+            if isinstance(trouble, MemoryConnectionError):
+                raise CodexSessionError(str(trouble)) from trouble
             raise
 
     def finish(self, prepared: PreparedCodex) -> None:
@@ -140,6 +148,8 @@ class CodexSession:
         project = self._toml_object(project_config, missing_ok=True)
         self._require_trust(root, trust_root, user, project)
         self._reject_provider_env((user, project))
+        MemoryConnection.check_name(user.get("mcp_servers"))
+        MemoryConnection.check_name(project.get("mcp_servers"))
         merged = self._merge_settings(user, project)
         # 危険モードを除外・安全化
         self._sanitize_danger(merged)
@@ -333,36 +343,7 @@ class CodexSession:
         )
 
     def _write_toml(self, path: Path, data: dict[str, object]) -> None:
-        lines: list[str] = []
-        tables: dict[str, dict[str, object]] = {}
-        for key, value in data.items():
-            if isinstance(value, dict):
-                tables[key] = {str(k): v for k, v in value.items()}  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-            else:
-                lines.append(f"{key} = {self._toml_value(value)}")
-        for table_key, table_data in tables.items():
-            for sub_key, sub_val in table_data.items():
-                if isinstance(sub_val, dict):
-                    lines.append(f'\n[{table_key}."{sub_key}"]')
-                    sub_dict: dict[str, object] = {str(k): v for k, v in sub_val.items()}  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
-                    for k, v in sub_dict.items():
-                        lines.append(f"{k} = {self._toml_value(v)}")
-                else:
-                    lines.append(f"\n[{table_key}]")
-                    lines.append(f"{sub_key} = {self._toml_value(sub_val)}")
-        _ = path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    def _toml_value(self, value: object) -> str:
-        if isinstance(value, str):
-            return json.dumps(value, ensure_ascii=False)
-        if isinstance(value, bool):
-            return "true" if value else "false"
-        if isinstance(value, (int, float)):
-            return str(value)
-        if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-            items = [self._toml_value(item) for item in value]
-            return f"[{', '.join(items)}]"
-        return json.dumps(str(value), ensure_ascii=False)
+        _ = path.write_text(tomlkit.dumps(data), encoding="utf-8")
 
     def _verify_auth(self, prepared: PreparedCodex) -> None:
         try:

@@ -25,6 +25,8 @@ printf 'わたしはそらです。\n' > "$data"/identity.md
 chown -R tester:tester "$data"
 cd /tmp
 /usr/lib/yadori/venv/bin/python -I -c 'import discord, fastembed, onnxruntime; print("Python dependencies: OK")'
+test -s /usr/share/doc/yadori/copyright
+/usr/lib/yadori/venv/bin/python -I -c 'from importlib.metadata import metadata; assert metadata("yadori")["License-Expression"] == "MIT"'
 runuser -u tester -- yadori state
 find "$data" -type f -exec sha256sum {} + | sort > /tmp/before
 old=$(dpkg-query -W -f='${Version}' yadori)
