@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-14
+
 ### Fixed
 
 - Claudeのlast-prompt管理行に付いた先頭NUL埋めを、元ログを変えずに読めるようにする
