@@ -98,3 +98,51 @@ def test_IT_091_001_通常CLIの実ログから完成した原文を取り込め
         assert len(records) == 1
         assert records[0].utterance == PROMPT
         assert "星砂" in records[0].reply and "21日" in records[0].reply
+
+
+@pytest.mark.contract
+def test_IT_091_001_Claudeの実スキル付加文から利用者の発話を復元する(tmp_path: Path) -> None:
+    if shutil.which("claude") is None:
+        pytest.skip("ログインしたClaude Codeが必要")
+    usual = tmp_path / "usual"
+    usual.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    skill = usual / "skills/import-repro"
+    skill.mkdir(parents=True)
+    _ = (skill / "SKILL.md").write_text(
+        "---\nname: import-repro\ndescription: A synthetic import format test.\n---\n"
+        + "Reply exactly IMPORT_SKILL_OK. Do not run other tools.\n"
+    )
+    (usual / ".credentials.json").symlink_to(Path.home() / ".claude/.credentials.json")
+    env = dict(os.environ)
+    env["CLAUDE_CONFIG_DIR"] = str(usual)
+    for key in ("YADORI_HOME", "YADORI_SETTINGS_SNAPSHOT", "GIT_DIR", "GIT_WORK_TREE"):
+        _ = env.pop(key, None)
+    prompt = "Use the import-repro skill. Invoke the Skill tool and follow it. No other tools."
+    result = subprocess.run(
+        ["claude", "--print", "--allowedTools", "Skill", "--", prompt],
+        cwd=work,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-1000:]
+    from yadori.adapter.importing.records import RecordJson
+
+    files = tuple((usual / "projects").rglob("*.jsonl"))
+    rows = [row for path in files for row in RecordJson.rows(path)[0]]
+    companions = [row for row in rows if row.get("isMeta") is True and row.get("sourceToolUseID")]
+    assert companions
+    assert any(
+        RecordJson.parts(RecordJson.mapping(row.get("message")).get("content")).startswith(
+            "Base directory for this skill:"
+        )
+        for row in companions
+    )
+    records = tuple(
+        record for path in files for record in SessionLogs().read("claude", path).conversations
+    )
+    assert len(records) == 1 and records[0].utterance == prompt
+    assert "IMPORT_SKILL_OK" in records[0].reply

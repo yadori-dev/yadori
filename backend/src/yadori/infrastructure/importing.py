@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,8 +60,9 @@ class Importer:
                 for path in files:
                     contents = logs.read(source.provider, path)
                     records.extend(contents.conversations)
-                    for notice in contents.notices:
-                        self._say(f"  {path.name}: {notice}")
+                    for notice, count in Counter(contents.notices).items():
+                        repeated = f"（同じ理由の発生: {count} 回）" if count > 1 else ""
+                        self._say(f"  {path.name}: {notice}{repeated}")
             importing = Importing(SqliteArchive(selected.memories_path), person)
             plan = importing.preview(records)
             pending = len(plan.added)

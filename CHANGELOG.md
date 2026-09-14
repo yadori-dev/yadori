@@ -8,6 +8,14 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-14
+
+### Fixed
+
+- Claudeのスキル説明を挟む完成応対を、元の利用者発話へ対応させて取り込む
+- 思考だけの断片を除外警告にせず、同一ファイルの同じ除外理由は発生回数付きでまとめる
+- 取り込み済みの先行関係を維持し、修正後の再実行で復元した往復だけを追加する
+
 ## [0.1.0] - 2026-09-14
 
 起動方法と設定の互換性変更を含むマイナー版。記憶の原文は維持する。
@@ -61,6 +69,7 @@
 - Git タグから製品版を求め、Release 発行から配布物と署名付き apt 配布元を自動で更新する仕組み
 - 進め方、要求分析、後戻りが高い判断、用語集、層の構造
 
-[Unreleased]: https://github.com/yadori-dev/yadori/compare/v0.1.0...develop
+[Unreleased]: https://github.com/yadori-dev/yadori/compare/v0.1.1...develop
+[0.1.1]: https://github.com/yadori-dev/yadori/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/yadori-dev/yadori/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/yadori-dev/yadori/releases/tag/v0.0.1

@@ -100,12 +100,15 @@ class ClaudeRecords:
             if message.get("stop_reason") != "end_turn":
                 continue
             text = RecordJson.parts(message.get("content"))
-            parent = self._parent_user(row, known)
-            if not text.strip() or parent is None or not self._user(parent):
+            if not text.strip():
+                continue
+            parent = self._parent_user(row, known, through_skills=True)
+            if parent is None or not self._user(parent):
                 notices.append("Claude: 完成応対の利用者発話を確認できず除外")
                 continue
             turn = RecordJson.text(parent, "uuid")
-            previous = self._parent_user(parent, known)
+            # 既存取り込みの先行関係を変えると、再実行が原文競合になる。
+            previous = self._parent_user(parent, known, through_skills=False)
             session = RecordJson.text(parent, "sessionId")
             result = ExternalConversation(
                 "claude",
@@ -136,7 +139,12 @@ class ClaudeRecords:
         return RecordJson.parts(RecordJson.mapping(row.get("message")).get("content"))
 
     def _user(self, row: dict[str, object]) -> bool:
-        if row.get("type") != "user" or row.get("isMeta") or row.get("isSidechain"):
+        if (
+            row.get("type") != "user"
+            or row.get("isMeta")
+            or row.get("isSidechain")
+            or RecordJson.text(row, "sourceToolUseID")
+        ):
             return False
         text = self._content(row)
         noise = (
@@ -153,7 +161,11 @@ class ClaudeRecords:
         return bool(text.strip()) and not any(text.lstrip().startswith(marker) for marker in noise)
 
     def _parent_user(
-        self, row: dict[str, object], known: dict[str, dict[str, object]]
+        self,
+        row: dict[str, object],
+        known: dict[str, dict[str, object]],
+        *,
+        through_skills: bool = False,
     ) -> dict[str, object] | None:
         parent = RecordJson.text(row, "parentUuid")
         seen: set[str] = set()
@@ -162,15 +174,25 @@ class ClaudeRecords:
             found = known.get(parent)
             if found is None:
                 return None
+            if through_skills and found.get("sessionId") != row.get("sessionId"):
+                return None
             # 人の発話でなくても、割り込みや画像は対応を越えてはいけない境界。
             if found.get("type") == "user":
                 content = RecordJson.mapping(found.get("message")).get("content")
-                if not any(
+                if not (through_skills and self._skill_companion(found)) and not any(
                     part.get("type") == "tool_result" for part in RecordJson.objects(content)
                 ):
                     return found
             parent = RecordJson.text(found, "parentUuid")
         return None
+
+    def _skill_companion(self, row: dict[str, object]) -> bool:
+        return (
+            row.get("isMeta") is True
+            and not row.get("isSidechain")
+            and bool(RecordJson.text(row, "sourceToolUseID"))
+            and self._content(row).startswith("Base directory for this skill:")
+        )
 
 
 class CodexRecords:
