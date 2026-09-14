@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -220,12 +221,91 @@ class ClaudeRecords:
             # 人の発話でなくても、割り込みや画像は対応を越えてはいけない境界。
             if found.get("type") == "user":
                 content = RecordJson.mapping(found.get("message")).get("content")
-                if not (through_skills and self._skill_companion(found)) and not any(
+                if not (through_skills and self._companion(found, known)) and not any(
                     part.get("type") == "tool_result" for part in RecordJson.objects(content)
                 ):
                     return found
             parent = RecordJson.text(found, "parentUuid")
         return None
+
+    def _companion(self, row: dict[str, object], known: dict[str, dict[str, object]]) -> bool:
+        if row.get("isMeta") is not True or row.get("isSidechain"):
+            return False
+        if self._skill_companion(row):
+            return True
+        image = (
+            r"\[Image: original \d+x\d+, displayed at \d+x\d+\. "
+            r"Multiply coordinates by \d+(?:\.\d+)? to map to original image\.\]"
+        )
+        source = r"\[Image: source: [^\r\n\[\]]+\]"
+        text = self._content(row)
+        if re.fullmatch(image, text) or re.fullmatch(source + r"(?:\n" + source + r")*", text):
+            return True
+        if self._read_image(row, known):
+            return True
+        call = RecordJson.text(row, "sourceToolUseID")
+        if not call:
+            return False
+        parent = RecordJson.text(row, "parentUuid")
+        seen: set[str] = set()
+        while parent and parent not in seen:
+            seen.add(parent)
+            found = known.get(parent)
+            if (
+                found is None
+                or found.get("sessionId") != row.get("sessionId")
+                or found.get("isSidechain")
+            ):
+                return False
+            content = RecordJson.mapping(found.get("message")).get("content")
+            if found.get("type") == "assistant" and any(
+                part.get("type") == "tool_use"
+                and part.get("name") == "Skill"
+                and part.get("id") == call
+                for part in RecordJson.objects(content)
+            ):
+                return True
+            if found.get("type") == "user" and not any(
+                part.get("type") == "tool_result" for part in RecordJson.objects(content)
+            ):
+                return False
+            parent = RecordJson.text(found, "parentUuid")
+        return False
+
+    def _read_image(self, row: dict[str, object], known: dict[str, dict[str, object]]) -> bool:
+        content = RecordJson.mapping(row.get("message")).get("content")
+        parts = RecordJson.objects(content)
+        if (
+            not parts
+            or list(parts) != content
+            or any(part.get("type") != "image" for part in parts)
+        ):
+            return False
+        parent = known.get(RecordJson.text(row, "parentUuid"), {})
+        caller = known.get(RecordJson.text(parent, "parentUuid"), {})
+        if (
+            parent.get("type") != "user"
+            or caller.get("type") != "assistant"
+            or any(
+                one.get("sessionId") != row.get("sessionId") or one.get("isSidechain")
+                for one in (parent, caller)
+            )
+        ):
+            return False
+        returned = RecordJson.mapping(parent.get("message")).get("content")
+        results = RecordJson.objects(returned)
+        if (
+            list(results) != returned
+            or len(results) != 1
+            or results[0].get("type") != "tool_result"
+        ):
+            return False
+        call = RecordJson.text(results[0], "tool_use_id")
+        tools = RecordJson.objects(RecordJson.mapping(caller.get("message")).get("content"))
+        matches = [
+            part for part in tools if part.get("type") == "tool_use" and part.get("id") == call
+        ]
+        return bool(call) and len(matches) == 1 and matches[0].get("name") == "Read"
 
     def _skill_companion(self, row: dict[str, object]) -> bool:
         return (
@@ -234,6 +314,20 @@ class ClaudeRecords:
             and bool(RecordJson.text(row, "sourceToolUseID"))
             and self._content(row).startswith("Base directory for this skill:")
         )
+
+
+@dataclass
+class CodexTurn:
+    user: dict[str, object] | None = None
+    previous: str | None = None
+    overlapping: bool = False
+    ambiguous: bool = False
+    context_after_ambiguity: bool = False
+    finished: bool = False
+
+    @property
+    def pending(self) -> bool:
+        return self.user is not None and not self.finished
 
 
 class CodexRecords:
@@ -256,83 +350,125 @@ class CodexRecords:
                 ) or "subagent" in RecordJson.mapping(origin):
                     return LogContents((), ("Codex: 子担当の会話を除外しました",))
         turn = ""
-        user: dict[str, object] | None = None
+        states: dict[str, CodexTurn] = {}
         reply = ""
         answer = ""
+        owner: str | None = None
         prior: str | None = None
         complete: list[ExternalConversation] = []
+        held: list[ExternalConversation] = []
         notices: list[str] = []
         for row in rows:
             payload = RecordJson.mapping(row.get("payload"))
             kind = RecordJson.text(payload, "type")
             if row.get("type") == "event_msg" and kind == "task_started":
-                if user is not None:
-                    notices.append("Codex: 未完の発話を次回へ残しました")
-                    prior = None
-                turn = RecordJson.text(payload, "turn_id")
-                user = None
-                reply = ""
-                answer = ""
+                incoming = RecordJson.text(payload, "turn_id")
+                if owner is None:
+                    reply = ""
+                if incoming not in states:
+                    pending = [state for state in states.values() if state.pending]
+                    for state in pending:
+                        state.overlapping = True
+                    states[incoming] = CodexTurn(overlapping=bool(pending))
+                    if pending:
+                        prior = None
+                turn = incoming
             if row.get("type") == "turn_context":
                 incoming = RecordJson.text(payload, "turn_id")
+                if incoming == turn and turn in states and states[turn].ambiguous:
+                    states[turn].context_after_ambiguity = True
                 if incoming and not turn:
+                    states[incoming] = states.pop("", CodexTurn())
                     turn = incoming
+            state = states.setdefault(turn, CodexTurn())
             if row.get("type") == "response_item" and kind == "message":
                 if payload.get("role") == "user" and self._human(payload):
-                    if user is not None:
+                    if owner is None or owner == turn:
+                        reply = ""
+                    if state.user is not None:
                         notices.append(
                             "Codex: 同じ往復に複数の利用者発話があり対応を確定できません"
                         )
-                        turn = ""
+                        state.ambiguous = True
                         prior = None
-                    user = row
+                    state.user = row
+                    state.previous = prior
                 elif (
                     payload.get("role") == "user"
                     and not RecordJson.parts(payload.get("content")).strip()
                 ):
                     prior = None
-                    user = None
-                    turn = ""
+                    state.user = None
+                    state.ambiguous = True
                     notices.append("Codex: 画像だけの発話を除外し、前後を分けました")
                 elif payload.get("role") == "assistant" and payload.get("phase") == "final_answer":
                     reply = RecordJson.parts(payload.get("content"))
-                    answer = RecordJson.text(payload, "id") or turn
+                    answer = RecordJson.text(payload, "id")
+                    pending_ids = [key for key, one in states.items() if one.pending]
+                    owner = pending_ids[0] if len(pending_ids) == 1 else None
             if row.get("type") == "event_msg" and kind == "task_complete":
-                if (
-                    turn
-                    and user is not None
-                    and RecordJson.text(payload, "turn_id") == turn
-                    and reply.strip()
-                ):
-                    text = RecordJson.parts(RecordJson.mapping(user.get("payload")).get("content"))
-                    complete.append(
-                        ExternalConversation(
+                identifier = RecordJson.text(payload, "turn_id")
+                target = states.get(identifier)
+                if target is not None and not target.finished:
+                    if (
+                        identifier
+                        and target.user is not None
+                        and reply.strip()
+                        and owner in (None, identifier)
+                        and (not target.overlapping or payload.get("last_agent_message") == reply)
+                    ):
+                        text = RecordJson.parts(
+                            RecordJson.mapping(target.user.get("payload")).get("content")
+                        )
+                        record = ExternalConversation(
                             "codex",
                             session,
-                            turn,
-                            answer,
-                            RecordJson.at(user, "timestamp"),
+                            identifier,
+                            answer or identifier,
+                            RecordJson.at(target.user, "timestamp"),
                             text,
                             reply,
-                            prior,
+                            target.previous,
                         )
-                    )
-                    prior = turn
-                elif user is not None:
-                    notices.append("Codex: 完了と発話を対応できず除外しました")
-                    prior = None
-                user = None
-                turn = ""
-                reply = ""
+                        if target.ambiguous:
+                            held.append(record)
+                            notices.append("Codex: 複数発話への応対を確定できず保留しました")
+                        else:
+                            complete.append(record)
+                        prior = (
+                            identifier
+                            if not target.overlapping
+                            and (not target.ambiguous or target.context_after_ambiguity)
+                            else None
+                        )
+                    elif target.user is not None:
+                        notices.append("Codex: 完了と発話を対応できず除外しました")
+                        prior = None
+                    target.finished = True
+                    if owner is None or owner == identifier:
+                        reply = ""
+                        answer = ""
+                        owner = None
             if row.get("type") == "event_msg" and kind in {"turn_aborted", "task_aborted"}:
-                if user is not None:
-                    notices.append("Codex: 中断された発話を除外しました")
-                user = None
-                turn = ""
-                prior = None
-        if user is not None:
-            notices.append("Codex: 未完の発話を次回へ残しました")
-        return LogContents(tuple(complete), tuple(notices))
+                identifier = RecordJson.text(payload, "turn_id")
+                targets = (
+                    [states[identifier]]
+                    if identifier in states
+                    else ([] if identifier else [one for one in states.values() if one.pending])
+                )
+                for target in targets:
+                    if target.pending:
+                        notices.append("Codex: 中断された発話を除外しました")
+                        target.finished = True
+                if targets:
+                    if not identifier or owner == identifier:
+                        reply = ""
+                        owner = None
+                    prior = None
+        for state in states.values():
+            if state.pending:
+                notices.append("Codex: 未完の発話を次回へ残しました")
+        return LogContents(tuple(complete), tuple(notices), tuple(held))
 
     def _human(self, payload: dict[str, object]) -> bool:
         text = RecordJson.parts(payload.get("content"))

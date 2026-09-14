@@ -85,11 +85,10 @@ class Importing:
         self,
         plan: ImportPlan,
         embeddings: Embeddings,
-        limit: int | None = None,
         progress: Callable[[int, int], None] | None = None,
     ) -> int:
         self.saved = 0
-        chosen = plan.added if limit is None else plan.added[:limit]
+        chosen = plan.added
         for record in chosen:
             vector = embeddings.to_remember(record.utterance)
             self.saved += self._archive.keep(self._person, record, embeddings.name, vector)
