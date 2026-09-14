@@ -141,3 +141,63 @@ def test_ST_091_009_IT_091_004_取消時に実際の子プロセス群を止め�
     pid = int(pid_file.read_text())
     result = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
     assert not result.stdout.strip() or result.stdout.lstrip().startswith("Z")
+
+
+def test_ST_091_010_IT_091_004_起動時の実処理も二百件で打ち切らない(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+    import shutil
+
+    from yadori.adapter.embedding import Announcing, CharacterPairs, DefaultEmbeddings
+    from yadori.domain.memory import Embeddings
+
+    config = configured(tmp_path)
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    rows: list[dict[str, object]] = [{"type": "session_meta", "payload": {"id": "fixture"}}]
+    for index in range(201):
+        turn = str(index)
+        rows.extend(
+            [
+                {"type": "event_msg", "payload": {"type": "task_started", "turn_id": turn}},
+                {
+                    "type": "response_item",
+                    "timestamp": "2026-09-14T00:00:00Z",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "架空の問い"}],
+                    },
+                },
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "phase": "final_answer",
+                        "content": [{"type": "output_text", "text": "架空の返事"}],
+                    },
+                },
+                {"type": "event_msg", "payload": {"type": "task_complete", "turn_id": turn}},
+            ]
+        )
+    _ = (logs / "rollout-fixture.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n"
+    )
+    snapshot = tmp_path / "snapshots/settings.toml"
+    snapshot.parent.mkdir()
+    _ = shutil.copyfile(config.path, snapshot)
+    monkeypatch.setenv("YADORI_HOME", str(tmp_path))
+    monkeypatch.setenv("YADORI_SETTINGS_SNAPSHOT", str(snapshot))
+
+    def embedding(
+        _self: DefaultEmbeddings, _cache: Path | None, _announcing: Announcing | None = None
+    ) -> Embeddings:
+        return CharacterPairs()
+
+    monkeypatch.setattr(DefaultEmbeddings, "__call__", embedding)
+    assert Preparing.worker("import") == 0
+    assert "取り込み完了: 201 件 / 残り: 0 件" in capsys.readouterr().out
+    assert Preparing.worker("import") == 0
+    assert "追加予定: 0 件 / 既存: 201 件" in capsys.readouterr().out

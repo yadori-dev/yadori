@@ -223,15 +223,15 @@ def test_ST_091_002_IT_091_001_途中応対を完成した原文にしない(
     assert not result.conversations and result.notices
 
 
-def test_ST_091_010_起動一回の取込上限で残りを再実行できる(tmp_path: Path) -> None:
+def test_ST_091_010_二百件を越えて全件を保存し再実行で重複しない(tmp_path: Path) -> None:
     record = SessionLogs().read("agy", source("agy")).conversations[0]
     archive = SqliteArchive(tmp_path / "memories.sqlite")
     importing = Importing(archive, "a")
     records = [replace(record, turn=str(index), answer=str(index + 1000)) for index in range(201)]
-    assert importing.apply(importing.preview(records), PAIRS, 200) == 200
+    assert importing.apply(importing.preview(records), PAIRS) == 201
     plan = importing.preview(records)
-    assert len(plan.added) == 1 and plan.existing == 200
-    assert importing.apply(plan, PAIRS, 200) == 1
+    assert not plan.added and plan.existing == 201
+    assert importing.apply(plan, PAIRS) == 0
 
 
 @pytest.mark.parametrize(

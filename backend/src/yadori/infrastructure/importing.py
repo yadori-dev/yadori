@@ -42,7 +42,6 @@ class Importer:
         sources: Sequence[ImportSource],
         person: str,
         apply: bool = False,
-        limit: int | None = None,
         settings: Settings | None = None,
     ) -> int:
         importing: Importing | None = None
@@ -72,7 +71,7 @@ class Importer:
             )
             if plan.held:
                 self._say(
-                    f"保留: {plan.held} 発話（複数の完成応対: {plan.held - plan.dependent} / "
+                    f"保留: {plan.held} 発話（対応未確定: {plan.held - plan.dependent} / "
                     + f"先行する発話が保留: {plan.dependent}）。"
                     + "今回の取り込みと既存の照合は保留します"
                 )
@@ -93,7 +92,6 @@ class Importer:
             _ = importing.apply(
                 plan,
                 embeddings,
-                limit,
                 lambda saved, total: self._say(f"取り込み中: {saved}/{total} 件"),
             )
             self._say(
