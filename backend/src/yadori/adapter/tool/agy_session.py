@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, final
 
+from yadori.adapter.recall.connection import NAME, MemoryConnection, MemoryConnectionError
 from yadori.adapter.tool.agy_notice import AgyJson
+
+SUPPORTED_AGY_VERSIONS = ("1.2.1:", "1.2.2:")
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,8 @@ class AgySession:
                 )
         if self._home.is_relative_to(self._usual) or self._cwd.is_relative_to(self._usual):
             raise ValueError("agy の設定置き場を宿りの保存先・作業場所には使えません")
+        if not self._internal:
+            self._check_memory_connection()
         settings = self._settings()
         onboarding = self._onboarding()
         version = subprocess.run(
@@ -75,8 +80,10 @@ class AgySession:
             env=self._environment,
             timeout=10,
         ).stdout.splitlines()
-        if not version or version[0] != "1.2.1:":
-            raise ValueError("この宿りが確認済みの agy は 1.2.1 です。対応版を確認してください")
+        if not version or version[0] not in SUPPORTED_AGY_VERSIONS:
+            raise ValueError(
+                "この宿りが対応する agy は 1.2.1 / 1.2.2 です。対応版を確認してください"
+            )
         sessions = self._home / "agy/sessions"
         sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
         run_dir = sessions / uuid.uuid4().hex
@@ -99,9 +106,7 @@ class AgySession:
                 AgyJson.object(path.read_text(encoding="utf-8"))
                 for path in (prepared.run_dir / "turns").glob("*.json")
             ]
-            unresolved = any(
-                row.get("reply") is not None and row.get("saved") is not True for row in records
-            )
+            unresolved = any(row.get("saved") is not True for row in records)
             if returncode != 0 or (prepared.run_dir / "failed").exists() or unresolved:
                 _ = (prepared.run_dir / "interrupted").touch()
                 print(
@@ -115,6 +120,15 @@ class AgySession:
             print(f"警告: agy の記録を片付けず残しました: {trouble}", file=sys.stderr)
         finally:
             prepared.lock.close()
+
+    def _check_memory_connection(self) -> None:
+        path = self._usual / "config/mcp_config.json"
+        text = path.read_text(encoding="utf-8").strip() if path.exists() else ""
+        configured = AgyJson.object(text) if text else {}
+        try:
+            MemoryConnection.check_name(configured.get("mcpServers"))
+        except MemoryConnectionError as trouble:
+            raise ValueError(str(trouble)) from trouble
 
     def _settings(self) -> dict[str, object]:
         path = self._usual / "antigravity-cli/settings.json"
@@ -163,6 +177,23 @@ class AgySession:
                 "enableTelemetry": settings.get("enableTelemetry", False),
             }
         )
+        if not self._internal:
+            sources = [settings]
+            roots = {
+                self._usual / "config",
+                *(parent / ".agents" for parent in (self._cwd, *self._cwd.parents)),
+            }
+            for root in roots:
+                for filename in ("settings.json", "config.json"):
+                    path = root / filename
+                    if path.is_file():
+                        text = path.read_text(encoding="utf-8").strip()
+                        if text:
+                            sources.append(AgyJson.object(text))
+            try:
+                borrowed["permissions"] = MemoryConnection.agy_permissions(sources)
+            except MemoryConnectionError as trouble:
+                raise ValueError(str(trouble)) from trouble
         return borrowed
 
     def _onboarding(self) -> dict[str, object]:
@@ -221,6 +252,14 @@ class AgySession:
         _ = (config / "agents/yadori/agent.md").write_text(agent, encoding="utf-8")
         if self._internal:
             return
+        AgyJson.write(
+            config / "mcp_config.json",
+            {
+                "mcpServers": {
+                    NAME: MemoryConnection.command(run_dir, self._home, self._environment)
+                }
+            },
+        )
         hooks: dict[str, object] = {}
         for event, name in (("PreInvocation", "pre"), ("Stop", "stop"), ("PreToolUse", "tool")):
             command = shlex.join(

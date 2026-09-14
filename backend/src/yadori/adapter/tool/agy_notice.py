@@ -82,6 +82,12 @@ class AgyNotice:
             for row in lines
             if row.get("type") == "USER_INPUT" and row.get("source") == "USER_EXPLICIT"
         ]
+        if event == "pre":
+            boundary = AgyJson.number(payload, "initialNumSteps")
+            users = [row for row in users if AgyJson.number(row, "step_index") < boundary]
+        elif event == "tool":
+            boundary = AgyJson.number(payload, "stepIdx")
+            users = [row for row in users if AgyJson.number(row, "step_index") < boundary]
         if not users:
             raise ValueError("agy の記録に持ち主の発話がありません")
         user = users[-1]
@@ -115,8 +121,10 @@ class AgyNotice:
                 or final_row.get("tool_calls")
                 or AgyJson.number(final_row, "step_index") <= step
             ):
-                raise ValueError("agy の正常終了に対応する最後の返事を確認できません")
-            reply = AgyJson.text(final_row, "content")
+                # Stopに発話識別子はない。進行中の新しい往復を古い通知で閉じない。
+                finished = False
+            else:
+                reply = AgyJson.text(final_row, "content")
         previous = (
             f"agy:{conversation_id}:{AgyJson.number(users[-2], 'step_index')}"
             if len(users) > 1

@@ -88,11 +88,20 @@ class Entry:
         - evals draft なら記録から評価セットの下書きを作る
         - それ以外は使い方を書く
         """
-        if not self._argv or self._argv[0] not in {"_claude-hook", "_codex-hook", "_agy-hook"}:
+        if not self._argv or self._argv[0] not in {
+            "_claude-hook",
+            "_codex-hook",
+            "_agy-hook",
+            "_memory-mcp",
+        }:
             _ = os.environ.pop("YADORI_SETTINGS_SNAPSHOT", None)
         if self._argv in (["--help"], ["-h"]):
             print(USAGE)
             return 0
+        if len(self._argv) == 2 and self._argv[0] == "_memory-mcp":
+            from yadori.infrastructure.memory_mcp import MemoryMCP
+
+            return MemoryMCP.run(Path(self._argv[1]))
         if self._argv == ["setting"]:
             return Setting().run()
         if not self._argv or self._argv in (["claude"], ["codex"], ["agy"], ["chat"]):

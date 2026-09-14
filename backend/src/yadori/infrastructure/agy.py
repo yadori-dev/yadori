@@ -12,12 +12,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import final
 
+from yadori.adapter.recall.connection import NAME, TOOLS, RecallGuidance
+from yadori.adapter.recall.ledger import RecallLedger
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool.agy_notice import AgyJson, AgyNotice
 from yadori.adapter.tool.agy_session import AgySession
 from yadori.adapter.tool.agy_words import AgyWords
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import EmbeddingsUnavailable, RememberingConflict
+from yadori.domain.recall.model import RecallFailure
 from yadori.infrastructure.settings import Configuration, NotSettled, SettingsFile
 from yadori.infrastructure.start import Startup
 
@@ -46,20 +49,30 @@ class AgyMemory:
             memories.close()
         return settings.home
 
-    def recall(self, notice: AgyNotice, path: Path) -> str:
+    def recall(self, notice: AgyNotice, path: Path, ledger: RecallLedger | None = None) -> str:
         if path.exists():
             record = AgyJson.object(path.read_text(encoding="utf-8"))
             if record.get("source") != notice.source or record.get("utterance") != notice.utterance:
                 raise ValueError("同じ agy の発話へ異なる原文が届きました")
             return AgyJson.text(record, "context")
         settings = self._files.read()
+        if ledger is not None and ledger.dweller_id != settings.dweller.id:
+            raise RecallFailure("unavailable", "起動時と異なる人物へ切り替えることはできません")
         memories = SqliteMemories(settings.memories_path)
         try:
             self._startup.settle(memories, settings)
             recalled = self._startup.conversation(memories, settings).recall(
                 settings.dweller.id, notice.utterance
             )
-            context = self._words.hook_response(recalled)
+            instructions = ""
+            if ledger is not None:
+                token = ledger.begin(
+                    notice.source,
+                    [one.id for one in recalled.recent]
+                    + [one.episode.id for one in recalled.found],
+                )
+                instructions = RecallGuidance.for_turn(token)
+            context = self._words.hook_response(recalled, instructions=instructions)
             AgyJson.write(
                 path,
                 {
@@ -169,6 +182,7 @@ class AgyHook:
         self._event = event
         self._run_dir = run_dir
         self._memory = AgyMemory(home, startup)
+        self._files = SettingsFile(home)
 
     def run(self) -> int:
         try:
@@ -181,12 +195,15 @@ class AgyHook:
             notice = AgyNotice.read(self._event, text, self._run_dir)
             self._check_primary(notice)
             path = self._run_dir / "turns" / f"{notice.step}.json"
+            ledger = RecallLedger(self._run_dir, self._files.read().dweller.id)
             if self._event == "tool":
                 print(self._tool(text))
             elif self._event == "pre":
-                print(self._memory.recall(notice, path))
+                print(self._memory.recall(notice, path, ledger))
             else:
                 self._memory.finish(notice, path)
+                if notice.finished:
+                    ledger.end(notice.source)
                 print("{}")
             return 0
         except (
@@ -194,6 +211,7 @@ class AgyHook:
             OSError,
             ValueError,
             RuntimeError,
+            RecallFailure,
             CannotSpeak,
             RememberingConflict,
             sqlite3.Error,
@@ -218,6 +236,12 @@ class AgyHook:
             "run_command",
         }
         arguments = AgyJson.object(json.dumps(call.get("args", {})))
+        if (
+            name == "call_mcp_tool"
+            and arguments.get("ServerName") == NAME
+            and arguments.get("ToolName") in TOOLS
+        ):
+            return json.dumps({"decision": "allow"})
         if name not in allowed or arguments.get("RunPersistent") is True:
             return json.dumps(
                 {
