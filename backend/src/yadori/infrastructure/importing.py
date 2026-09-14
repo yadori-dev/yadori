@@ -13,7 +13,7 @@ from typing import TextIO, final
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.importing.archive import SqliteArchive
 from yadori.adapter.importing.records import SessionLogs
-from yadori.domain.importing.model import ExternalConversation, ImportFailed, Provider
+from yadori.domain.importing.model import ImportFailed, LogContents, Provider
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.usecase.importing.service import Importing
@@ -52,24 +52,30 @@ class Importer:
             if selected.dweller.id != person:
                 raise NotSettled("取り込み先の人物と固定した設定が一致しません")
             self._say(f"取り込み先: {selected.dweller.name}（{selected.dweller.id}）")
-            records: list[ExternalConversation] = []
+            read_logs: list[LogContents] = []
             logs = SessionLogs()
             for source in sources:
                 files = logs.files(source.provider, source.path.expanduser())
                 self._say(f"取り込み元: {source.provider} / {source.path}（{len(files)}ファイル）")
                 for path in files:
                     contents = logs.read(source.provider, path)
-                    records.extend(contents.conversations)
+                    read_logs.append(contents)
                     for notice, count in Counter(contents.notices).items():
                         repeated = f"（同じ理由の発生: {count} 回）" if count > 1 else ""
                         self._say(f"  {path.name}: {notice}{repeated}")
             importing = Importing(SqliteArchive(selected.memories_path), person)
-            plan = importing.preview(records)
+            plan = importing.preview_logs(read_logs)
             pending = len(plan.added)
             self._say(
                 f"追加予定: {pending} 件 / 既存: {plan.existing} 件"
                 + f" / 宿り自身の記録: {plan.native} 件"
             )
+            if plan.held:
+                self._say(
+                    f"保留: {plan.held} 発話（複数の完成応対: {plan.held - plan.dependent} / "
+                    + f"先行する発話が保留: {plan.dependent}）。"
+                    + "今回の取り込みと既存の照合は保留します"
+                )
             for record in plan.added[:10]:
                 self._say(
                     f"  {record.provider} {record.happened_at.isoformat()} 会話 {record.session}: "
@@ -92,6 +98,7 @@ class Importer:
             )
             self._say(
                 f"取り込み完了: {importing.saved} 件 / 残り: {max(0, pending - importing.saved)} 件"
+                + (f" / 保留: {plan.held} 発話" if plan.held else "")
             )
             return 0
         except (ImportFailed, NotSettled, OSError, sqlite3.Error, EmbeddingsUnavailable) as trouble:
