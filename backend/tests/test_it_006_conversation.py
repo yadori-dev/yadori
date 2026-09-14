@@ -77,6 +77,8 @@ class _FailingIndex:
         source: str | None,
         indexes: Collection[tuple[str, Vector]],
         moved: Moved | None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         episode = self._inner.keep_episode(
             dweller_id,
@@ -88,6 +90,8 @@ class _FailingIndex:
             source,
             (),
             moved,
+            session_id,
+            previous_source,
         )
         for model, vector in indexes:
             self.write_index(episode.id, model, vector)

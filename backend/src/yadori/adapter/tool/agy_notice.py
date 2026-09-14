@@ -60,6 +60,7 @@ class AgyNotice:
     utterance: str
     reply: str | None
     finished: bool
+    previous_source: str | None = None
 
     @property
     def source(self) -> str:
@@ -116,4 +117,9 @@ class AgyNotice:
             ):
                 raise ValueError("agy の正常終了に対応する最後の返事を確認できません")
             reply = AgyJson.text(final_row, "content")
-        return cls(conversation_id, step, found.group(1), reply, finished)
+        previous = (
+            f"agy:{conversation_id}:{AgyJson.number(users[-2], 'step_index')}"
+            if len(users) > 1
+            else None
+        )
+        return cls(conversation_id, step, found.group(1), reply, finished, previous)

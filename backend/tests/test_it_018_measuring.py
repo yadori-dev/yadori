@@ -65,6 +65,8 @@ class _WithoutIndex:
         source: str | None,
         indexes: Collection[tuple[str, Vector]],
         moved: Moved | None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         del indexes
         return self._inner.keep_episode(
@@ -77,6 +79,8 @@ class _WithoutIndex:
             source,
             (),
             moved,
+            session_id,
+            previous_source,
         )
 
 

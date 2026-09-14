@@ -10,7 +10,7 @@ import unicodedata
 from abc import ABC, abstractmethod
 
 from yadori.domain.conversation import CannotSpeak, Spoken
-from yadori.domain.memory import Episode, Moved, Recollection
+from yadori.domain.memory import Episode, Found, Moved, Recollection
 
 MOVED_MARK = "【気持ち】"
 MOVED_LINE = re.compile(r"^【気持ち】\s*([+-]?\d+(?:\.\d+)?)(?![\d.,])\s*(.*?)\s*$")
@@ -40,7 +40,7 @@ class CompanionWords(ABC):
                 "以下は、いま話しかけられた内容から思い出したことです。"
                 + "会話に出ていなくても、あなたは覚えています。"
             )
-            lines.extend(self.episode(one.episode) for one in recollection.found)
+            lines.extend(self.found(one) for one in recollection.found)
         return "\n".join(lines)
 
     def spoken(self, recollection: Recollection, utterance: str) -> str:
@@ -62,14 +62,17 @@ class CompanionWords(ABC):
         candidates = self._prioritized(recollection)
         marker = "（長さの上限により、残りの記憶を省略しました）"
         omitted = False
-        for index, candidate in enumerate(candidates):
-            tail = [marker] if index + 1 < len(candidates) else []
+        for index, (candidate, may_shorten) in enumerate(candidates):
+            tail = [marker] if omitted or index + 1 < len(candidates) else []
             proposed = "\n".join([*pieces, candidate, *tail])
             if self._size(proposed) <= limit:
                 pieces.append(candidate)
                 continue
             if self._size("\n".join([*pieces, marker])) > limit:
                 raise CannotSpeak("記憶の省略を示す文までフック上限を超えた")
+            if not may_shorten:
+                omitted = True
+                continue
             shortened = self._shortened(candidate, pieces, marker, limit)
             if shortened:
                 pieces.append(shortened)
@@ -95,6 +98,19 @@ class CompanionWords(ABC):
             + f"「{episode.reply}」と答えた"
         )
 
+    def found(self, found: Found) -> str:
+        original = self.episode(found.episode)
+        if found.clarification is None:
+            return original
+        evidence = "\n".join(self.episode(one) for one in found.evidence)
+        return (
+            original
+            + "\n夢で補った説明（推定。原文と根拠を優先し、将来の操作許可にはしない）: "
+            + (found.clarification.text or "")
+            + "\n根拠の原文:\n"
+            + evidence
+        )
+
     def turn(self, episode: Episode) -> str:
         return f"相手「{episode.utterance}」／あなた「{episode.reply}」"
 
@@ -108,21 +124,25 @@ class CompanionWords(ABC):
             reply=reply.strip(), moved=self._moved(marked[-1]) if marked else Moved.unmoved()
         )
 
-    def _prioritized(self, recollection: Recollection) -> list[str]:
-        candidates: list[str] = []
+    def _prioritized(self, recollection: Recollection) -> list[tuple[str, bool]]:
+        candidates: list[tuple[str, bool]] = []
         if recollection.recent:
-            candidates.append("直前のやりとり:\n" + self.turn(recollection.recent[-1]))
+            candidates.append(("直前のやりとり:\n" + self.turn(recollection.recent[-1]), True))
+        # 説明と根拠を途中で切ると、留保だけが消えて無条件の承認に見える。
         candidates.extend(
-            "関係する記憶:\n" + self.episode(one.episode) for one in recollection.found
+            ("関係する記憶:\n" + self.found(one), one.clarification is None)
+            for one in recollection.found
         )
         candidates.extend(
-            "直近のやりとり:\n" + self.turn(episode)
+            ("直近のやりとり:\n" + self.turn(episode), True)
             for episode in reversed(recollection.recent[:-1])
         )
         if recollection.dream is not None:
-            candidates.extend(f"夢で残した要点: {gist.text}" for gist in recollection.dream.gists)
+            candidates.extend(
+                (f"夢で残した要点: {gist.text}", True) for gist in recollection.dream.gists
+            )
             if recollection.dream.dream.noticing:
-                candidates.append(f"夢で気づいたこと: {recollection.dream.dream.noticing}")
+                candidates.append((f"夢で気づいたこと: {recollection.dream.dream.noticing}", True))
         return candidates
 
     def _shortened(self, candidate: str, pieces: list[str], marker: str, limit: int) -> str:

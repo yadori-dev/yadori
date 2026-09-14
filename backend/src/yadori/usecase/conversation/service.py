@@ -13,6 +13,7 @@ from collections.abc import Callable, Collection, Sequence
 from datetime import datetime
 from typing import final
 
+from yadori.domain.dream.clarification import REVISION
 from yadori.domain.memory import (
     Dreamed,
     Embeddings,
@@ -87,6 +88,8 @@ class Conversation:
         recalled_at: datetime | None = None,
         source: str | None = None,
         identity_version: int | None = None,
+        session_id: str | None = None,
+        previous_source: str | None = None,
     ) -> Episode:
         """一度のやりとりを、原文のまま記憶へ加え、気持ちを動かす。
 
@@ -108,6 +111,8 @@ class Conversation:
             source,
             made,
             moved,
+            session_id,
+            previous_source,
         )
 
     def _dreamed(self, dweller_id: str) -> Dreamed | None:
@@ -122,7 +127,7 @@ class Conversation:
         return State.from_shifts(self._memories.shifts(dweller_id), at or self._now())
 
     def rebuild_index(self, dweller_id: str) -> int:
-        """インデックスを原文から作り直す。
+        """インデックスを原文と保存済みの補完から作り直す。
 
         - インデックスを持たない原文を集める
         - 一件ずつインデックスを作る
@@ -133,6 +138,19 @@ class Conversation:
         for way in self._ways:
             for episode in self._memories.episodes_without_index(dweller_id, way.name):
                 self._memories.write_index(episode.id, way.name, way.to_remember(episode.utterance))
+                rebuilt += 1
+            for record in self._memories.clarifications_without_index(
+                dweller_id, way.name, REVISION
+            ):
+                episode = self._memories.episode(record.episode_id)
+                if episode is None:
+                    raise RuntimeError("補完の原文が見つからない")
+                self._memories.write_clarification_index(
+                    episode.id,
+                    record.revision,
+                    way.name,
+                    way.to_remember(record.searchable(episode)),
+                )
                 rebuilt += 1
         return rebuilt
 
@@ -179,16 +197,32 @@ class Conversation:
         self, way: Embeddings, dweller_id: str, utterance: str, skip: list[int]
     ) -> tuple[Found, ...]:
         """一つの道で探す。"""
+        vector = way.to_recall(utterance)
         hits = self._memories.search(
             dweller_id,
             way.name,
-            way.to_recall(utterance),
+            vector,
             self._how.found_limit,
             self._how.relevance_floor,
             exclude=skip,
         )
+        contextual = self._memories.search_clarifications(
+            dweller_id,
+            way.name,
+            vector,
+            self._how.found_limit,
+            max(self._how.relevance_floor, self._how.clarification_floor),
+            skip,
+            REVISION,
+        )
+        best: dict[int, tuple[Episode, float]] = {}
+        for episode, relevance in (*hits, *contextual):
+            if episode.id not in best or relevance > best[episode.id][1]:
+                best[episode.id] = (episode, relevance)
+        merged = sorted(best.values(), key=lambda pair: (-pair[1], -pair[0].id))
         return tuple(
-            self._with_retrieval(episode, relevance, way.name) for episode, relevance in hits
+            self._with_retrieval(episode, relevance, way.name)
+            for episode, relevance in merged[: self._how.found_limit]
         )
 
     def _woven(self, by_way: list[tuple[Found, ...]]) -> tuple[Found, ...]:
@@ -208,11 +242,21 @@ class Conversation:
 
     def _with_retrieval(self, episode: Episode, relevance: float, way: str) -> Found:
         """近さと思い出した記録を、別の値として並べる。一つの点数へ混ぜない。"""
+        record = self._memories.clarification(episode.id, REVISION)
+        if record is not None and record.status != "clarified":
+            record = None
+        evidence = (
+            tuple(self._memories.episode(source) for source in record.sources) if record else ()
+        )
+        if any(one is None for one in evidence):
+            raise RuntimeError("補完の根拠が見つからない")
         return Found(
             episode=episode,
             relevance=relevance,
             retrieval=self._memories.retrieval(episode.id),
             way=way,
+            clarification=record,
+            evidence=tuple(one for one in evidence if one is not None),
         )
 
     def _record_retrieval(self, found: Collection[Found], at: datetime) -> None:

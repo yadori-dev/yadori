@@ -16,6 +16,7 @@ from yadori.adapter.tool import (
     PendingStore,
     PendingTurn,
 )
+from yadori.adapter.tool.continuity import Continuity
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import EmbeddingsUnavailable, RememberingConflict
 from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
@@ -67,6 +68,7 @@ class CodexHook:
         self._event = event.lower().replace("_", "-")
         self._settings_file = SettingsFile(home)
         self._run_dir = run_dir
+        self._continuity = Continuity(run_dir)
         self._words = CodexWords()
         self._pending_store = PendingStore(run_dir)
         self._startup = startup or Startup(home)
@@ -114,6 +116,7 @@ class CodexHook:
                 print(f"前の一往復を覚えられません: {trouble}", file=sys.stderr)
                 return 2
         self._pending_store.discard(session_id)
+        previous = self._continuity.begin(session_id, f"codex:{turn_id}")
         settings, memories, conversation = self._conversation()
         try:
             recollection = conversation.recall(settings.dweller.id, utterance)
@@ -126,6 +129,7 @@ class CodexHook:
                     recollection.recalled_at,
                     recollection.identity.version,
                     context,
+                    previous_source=previous,
                 )
             )
         finally:
@@ -159,6 +163,7 @@ class CodexHook:
                 pending.identity_version,
                 pending.context,
                 spoken,
+                pending.previous_source,
             )
             self._pending_store.save(pending)
             self._remember(pending)
@@ -174,6 +179,7 @@ class CodexHook:
     def _interrupt(self, payload: dict[str, object]) -> int:
         session_id = str(payload.get("session_id", ""))
         if session_id:
+            self._continuity.interrupt(session_id)
             self._pending_store.discard(session_id)
         return 0
 
@@ -208,7 +214,10 @@ class CodexHook:
                 recalled_at=pending.recalled_at,
                 source=f"codex:{pending.turn_id}",
                 identity_version=pending.identity_version,
+                session_id=f"codex:{pending.session_id}",
+                previous_source=pending.previous_source,
             )
+            self._continuity.finish(pending.session_id, f"codex:{pending.turn_id}")
         finally:
             memories.close()
 

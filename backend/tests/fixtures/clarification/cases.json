@@ -1,0 +1,196 @@
+{
+  "conditions": {
+    "top_k": 5,
+    "floor": 0.85,
+    "recent_turns": 0,
+    "embedding": "default",
+    "pass": "expected-hit questions increase; forbidden-hit questions and existing regressions do not increase"
+  },
+  "cases": [
+    {
+      "name": "headings",
+      "proposal": "資料は見出しごとに分けて整理しますか",
+      "utterance": "その形でお願い",
+      "expected": "approval",
+      "query": "資料を見出しごとに整理する方法は承認したっけ",
+      "forbidden": [
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "backup",
+      "proposal": "バックアップは毎週日曜日に作りますか",
+      "utterance": "その形でお願い",
+      "expected": "approval",
+      "query": "毎週日曜日のバックアップの提案にどう答えた",
+      "forbidden": [
+        "headings",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "deny",
+      "proposal": "会議の録音を公開しますか",
+      "utterance": "それはやめて",
+      "expected": "denial",
+      "query": "会議の録音の公開を許可したっけ",
+      "forbidden": [
+        "headings",
+        "backup",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "continue",
+      "proposal": "手順の説明を再開しますか",
+      "utterance": "先をお願い",
+      "expected": "continuation",
+      "query": "手順の説明を続けてほしいと伝えたっけ",
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "choice",
+      "proposal": "表紙は赤と青のどちらにしますか",
+      "utterance": "青でお願い",
+      "expected": "selection",
+      "query": "表紙の色はどれを選んだ",
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "ambiguous",
+      "proposal": "表紙は赤と青のどちらにしますか",
+      "utterance": "承知しました",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "standalone",
+      "proposal": "次の会議の相談です",
+      "utterance": "期限は金曜日",
+      "expected": "unneeded",
+      "query": null,
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "conditional",
+      "proposal": "下書きを作りますか。公開は別途確認します",
+      "utterance": "下書きだけお願い",
+      "expected": "approval",
+      "query": "下書きを作る依頼で公開まで許可したっけ",
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "future"
+      ]
+    },
+    {
+      "name": "uncertain",
+      "proposal": "案Aも案Bも候補にできます",
+      "utterance": "そうなんだ",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "independent",
+      "proposal": "こんにちは",
+      "utterance": "今日は晴れです",
+      "expected": "unneeded",
+      "query": null,
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "two_targets",
+      "proposal": "資料の公開と顧客への送信を進めますか",
+      "utterance": "それだけお願い",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional",
+        "future"
+      ]
+    },
+    {
+      "name": "future",
+      "proposal": "今回だけ既存の下書きを直しますか",
+      "utterance": "今回だけお願い",
+      "expected": "approval",
+      "query": "下書き修正をこれから毎回許可したっけ",
+      "forbidden": [
+        "headings",
+        "backup",
+        "deny",
+        "continue",
+        "choice",
+        "conditional"
+      ]
+    }
+  ]
+}

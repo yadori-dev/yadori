@@ -1,0 +1,252 @@
+{
+  "conditions": {
+    "embedding": "default",
+    "raw_floor": 0.85,
+    "clarification_floor": 0.9,
+    "top_k": 5,
+    "recent_turns": 0,
+    "pass": "expected-hit questions increase; forbidden-hit questions and existing regressions do not increase"
+  },
+  "cases": [
+    {
+      "name": "receipts",
+      "proposal": "領収書は月ごとのフォルダに保存しますか",
+      "utterance": "その形でお願い",
+      "expected": "approval",
+      "query": "領収書を月ごとのフォルダへ保存する案は承認したっけ",
+      "forbidden": [
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "invoices",
+      "proposal": "請求書は取引先ごとのフォルダに分けますか",
+      "utterance": "その形でお願い",
+      "expected": "approval",
+      "query": "請求書を取引先ごとに分ける案にどう返事した",
+      "forbidden": [
+        "receipts",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "video",
+      "proposal": "研修動画を社外へ公開しますか",
+      "utterance": "やめてください",
+      "expected": "denial",
+      "query": "研修動画の社外公開についてどう判断した",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "resume",
+      "proposal": "接続設定の説明を再開しましょうか",
+      "utterance": "続けて",
+      "expected": "continuation",
+      "query": "接続設定の説明を再開してほしいと依頼したっけ",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "format",
+      "proposal": "配布資料はPDFとWordのどちらにしますか",
+      "utterance": "PDFで",
+      "expected": "selection",
+      "query": "配布資料の形式に何を選んだ",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "maildraft",
+      "proposal": "案内メールの下書きを作りますか。送信は別途確認します",
+      "utterance": "下書きだけ頼む",
+      "expected": "approval",
+      "query": "案内メールは下書きだけ依頼したのか送信まで許可したのか",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "once",
+      "proposal": "今回だけ画像を圧縮しますか",
+      "utterance": "今回だけでお願い",
+      "expected": "approval",
+      "query": "画像の圧縮を毎回許可したのか今回だけなのか",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "inventory",
+      "proposal": "在庫一覧は毎週金曜日に更新しますか",
+      "utterance": "それで進めて",
+      "expected": "approval",
+      "query": "在庫一覧を毎週金曜日に更新する提案は承認された",
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "unknownformat",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "unknownformat",
+      "proposal": "配布資料はPDFとWordのどちらにしますか",
+      "utterance": "わかりました",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "weather",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "weather",
+      "proposal": "こんにちは",
+      "utterance": "今日は雨です",
+      "expected": "unneeded",
+      "query": null,
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "twowork",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "twowork",
+      "proposal": "住所の更新と口座の変更を進めますか",
+      "utterance": "それだけお願い",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "unrelated"
+      ]
+    },
+    {
+      "name": "unrelated",
+      "proposal": "料金プランを見直しますか",
+      "utterance": "ふーん",
+      "expected": "deferred",
+      "query": null,
+      "forbidden": [
+        "receipts",
+        "invoices",
+        "video",
+        "resume",
+        "format",
+        "maildraft",
+        "once",
+        "inventory",
+        "unknownformat",
+        "weather",
+        "twowork"
+      ]
+    }
+  ]
+}

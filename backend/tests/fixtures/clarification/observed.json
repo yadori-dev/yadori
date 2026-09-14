@@ -1,0 +1,154 @@
+[
+  {
+    "name": "headings",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、資料を見出しごとに分けて整理する提案を承認した。",
+    "reason": "「その形」は直前の資料整理の提案を一意に指している。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、資料を見出しごとに分けて整理する提案を承認した。\",\"reason\":\"「その形」は直前の資料整理の提案を一意に指している。\",\"sources\":[1]}",
+    "seconds": 6.8466994870000235,
+    "model": "codex:default"
+  },
+  {
+    "name": "backup",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、バックアップを毎週日曜日に作る提案を承認した。",
+    "reason": "「その形」は直前のバックアップを毎週日曜日に作る提案を一意に指す。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、バックアップを毎週日曜日に作る提案を承認した。\",\"reason\":\"「その形」は直前のバックアップを毎週日曜日に作る提案を一意に指す。\",\"sources\":[1]}",
+    "seconds": 7.188978959999986,
+    "model": "codex:default"
+  },
+  {
+    "name": "deny",
+    "status": "clarified",
+    "kind": "denial",
+    "text": "ユーザーは会議の録音を公開することを拒否した。",
+    "reason": "「それ」が直前に尋ねられた会議の録音の公開を一意に指すため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"denial\",\"text\":\"ユーザーは会議の録音を公開することを拒否した。\",\"reason\":\"「それ」が直前に尋ねられた会議の録音の公開を一意に指すため。\",\"sources\":[1]}",
+    "seconds": 6.961857569000131,
+    "model": "codex:default"
+  },
+  {
+    "name": "continue",
+    "status": "clarified",
+    "kind": "continuation",
+    "text": "ユーザーは、手順の説明を再開して先を続けるよう求めた。",
+    "reason": "直前に手順の説明を再開するか尋ねられており、続ける対象が一意に特定できるため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"continuation\",\"text\":\"ユーザーは、手順の説明を再開して先を続けるよう求めた。\",\"reason\":\"直前に手順の説明を再開するか尋ねられており、続ける対象が一意に特定できるため。\",\"sources\":[1]}",
+    "seconds": 7.630845131000115,
+    "model": "codex:default"
+  },
+  {
+    "name": "choice",
+    "status": "clarified",
+    "kind": "selection",
+    "text": "ユーザーは表紙の色として青を選んだ。",
+    "reason": "直前の赤か青かという質問から、選択対象が表紙の色だと一意に特定できるため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"selection\",\"text\":\"ユーザーは表紙の色として青を選んだ。\",\"reason\":\"直前の赤か青かという質問から、選択対象が表紙の色だと一意に特定できるため。\",\"sources\":[1]}",
+    "seconds": 7.600322115000154,
+    "model": "codex:default"
+  },
+  {
+    "name": "ambiguous",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "「承知しました」は相槌にとどまり、表紙を赤と青のどちらにするかを特定できません。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"「承知しました」は相槌にとどまり、表紙を赤と青のどちらにするかを特定できません。\",\"sources\":[1]}",
+    "seconds": 6.238578718000099,
+    "model": "codex:default"
+  },
+  {
+    "name": "standalone",
+    "status": "unneeded",
+    "kind": null,
+    "text": null,
+    "reason": "対象の発話は期限が金曜日であることを単独で伝えており、先行文脈による補足を必要としない。",
+    "sources": [],
+    "raw": "{\"status\":\"unneeded\",\"kind\":null,\"text\":null,\"reason\":\"対象の発話は期限が金曜日であることを単独で伝えており、先行文脈による補足を必要としない。\",\"sources\":[]}",
+    "seconds": 7.991312525000012,
+    "model": "codex:default"
+  },
+  {
+    "name": "conditional",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは下書きの作成だけを依頼し、公開は別途確認するという条件で了承した。",
+    "reason": "直前の下書き作成の提案に対する限定的な承認であり、対象が一意に特定できる。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは下書きの作成だけを依頼し、公開は別途確認するという条件で了承した。\",\"reason\":\"直前の下書き作成の提案に対する限定的な承認であり、対象が一意に特定できる。\",\"sources\":[1]}",
+    "seconds": 8.908477538999932,
+    "model": "codex:default"
+  },
+  {
+    "name": "uncertain",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "「そうなんだ」は曖昧な相槌であり、案A・案Bへの承認や選択を一意に特定できないため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"「そうなんだ」は曖昧な相槌であり、案A・案Bへの承認や選択を一意に特定できないため。\",\"sources\":[1]}",
+    "seconds": 8.088599189000206,
+    "model": "codex:default"
+  },
+  {
+    "name": "independent",
+    "status": "unneeded",
+    "kind": null,
+    "text": null,
+    "reason": "対象の発話「今日は晴れです」は先行文脈なしでも意味が通るため。",
+    "sources": [],
+    "raw": "{\"status\":\"unneeded\",\"kind\":null,\"text\":null,\"reason\":\"対象の発話「今日は晴れです」は先行文脈なしでも意味が通るため。\",\"sources\":[]}",
+    "seconds": 6.967834440000161,
+    "model": "codex:default"
+  },
+  {
+    "name": "two_targets",
+    "status": "deferred",
+    "kind": null,
+    "text": null,
+    "reason": "直前に資料の公開と顧客への送信の二つが提示されており、「それだけ」がどちらか一方か両方かを一意に特定できないため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"deferred\",\"kind\":null,\"text\":null,\"reason\":\"直前に資料の公開と顧客への送信の二つが提示されており、「それだけ」がどちらか一方か両方かを一意に特定できないため。\",\"sources\":[1]}",
+    "seconds": 13.511208718000034,
+    "model": "codex:default"
+  },
+  {
+    "name": "future",
+    "status": "clarified",
+    "kind": "approval",
+    "text": "ユーザーは、既存の下書きを直す提案を今回だけ承認した。",
+    "reason": "直前の提案から依頼対象が一意に特定でき、「今回だけ」という制限も明示されているため。",
+    "sources": [
+      1
+    ],
+    "raw": "{\"status\":\"clarified\",\"kind\":\"approval\",\"text\":\"ユーザーは、既存の下書きを直す提案を今回だけ承認した。\",\"reason\":\"直前の提案から依頼対象が一意に特定でき、「今回だけ」という制限も明示されているため。\",\"sources\":[1]}",
+    "seconds": 7.498735710000119,
+    "model": "codex:default"
+  }
+]
