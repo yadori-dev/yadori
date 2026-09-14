@@ -68,3 +68,4 @@ class ExternalFound:
 class LogContents:
     conversations: tuple[ExternalConversation, ...]
     notices: tuple[str, ...] = ()
+    held: tuple[ExternalConversation, ...] = ()
