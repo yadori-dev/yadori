@@ -18,7 +18,7 @@ from yadori.adapter.tool.agy_session import AgySession
 from yadori.adapter.tool.agy_words import AgyWords
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import EmbeddingsUnavailable, RememberingConflict
-from yadori.infrastructure.settings import NotSettled, SettingsFile
+from yadori.infrastructure.settings import Configuration, NotSettled, SettingsFile
 from yadori.infrastructure.start import Startup
 
 
@@ -58,6 +58,7 @@ class AgyMemory:
             AgyJson.write(
                 path,
                 {
+                    "dweller_id": settings.dweller.id,
                     "source": notice.source,
                     "utterance": notice.utterance,
                     "recalled_at": recalled.recalled_at.isoformat(),
@@ -97,9 +98,13 @@ class AgyMemory:
         settings = self._files.read()
         memories = SqliteMemories(settings.memories_path)
         try:
-            self._startup.settle(memories, settings)
+            if "dweller_id" not in record and len(Configuration(settings.home).load().people()) > 1:
+                raise ValueError("旧い回復記録の人物を特定できません。原文を残して起動を止めます")
+            identifier = record.get("dweller_id", settings.dweller.id)
+            if not isinstance(identifier, str) or memories.dweller(identifier) is None:
+                raise ValueError("回復記録の人物を確認できません。別の人物へは保存しません")
             _ = self._startup.conversation(memories, settings).remember(
-                settings.dweller.id,
+                identifier,
                 AgyJson.text(record, "utterance"),
                 spoken.reply,
                 spoken.moved,

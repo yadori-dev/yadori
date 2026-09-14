@@ -11,10 +11,11 @@ from typing import TextIO, final
 from yadori.adapter.dream import ClaudeCodeSummarizing
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
 from yadori.adapter.store import SqliteMemories
-from yadori.adapter.tool import ClaudeCodeCall
 from yadori.domain.dream import CannotDream, Summarizing
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall, NameNotDeclared
 from yadori.infrastructure.settings import NotSettled, SettingsFile
+from yadori.infrastructure.start import Startup
+from yadori.infrastructure.tools import SelectedCall
 from yadori.usecase.dream import Dreaming, Dreamt, NothingKept, NothingNew
 
 # 選んだ往復は一晩分でも十数件になる。応対より長めに待つ。
@@ -53,14 +54,15 @@ class Dreamer:
             return 1
         memories = SqliteMemories(settings.memories_path)
         try:
+            Startup(settings.home).settle(memories, settings)
             summarizing = self._summarizing or ClaudeCodeSummarizing(
-                ClaudeCodeCall(settings.model, SUMMARIZE_WAIT_SECONDS)
+                SelectedCall("夢の要約", SUMMARIZE_WAIT_SECONDS, settings.home)
             )
             embeddings = self._default(settings.models_path, print)
             dreamt = Dreaming(
                 memories, embeddings, summarizing, lambda: datetime.now(UTC), self._how
             ).run(settings.dweller.id)
-        except (CannotDream, NameNotDeclared, EmbeddingsUnavailable) as reason:
+        except (NotSettled, CannotDream, NameNotDeclared, EmbeddingsUnavailable) as reason:
             print(f"夢を見られません: {reason}", file=sys.stderr)
             return 1
         finally:

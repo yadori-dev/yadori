@@ -5,13 +5,18 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import final
 
+import tomlkit
+
 from yadori.adapter.embedding import Choosing, NotAnEmbeddingName, Weighing
 from yadori.adapter.place import DiscordGateway, DiscordPlace
+from yadori.adapter.tool import ToolCallFailed
 from yadori.domain.memory import EmbeddingsUnavailable, HowToRecall
 from yadori.infrastructure.agy import AgyCompanion, AgyHook
 from yadori.infrastructure.claude import ClaudeCompanion, ClaudeHook
@@ -19,12 +24,16 @@ from yadori.infrastructure.codex import CodexCompanion, CodexHook
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.dream import Dreamer
 from yadori.infrastructure.measure import Measure
-from yadori.infrastructure.settings import NotSettled, SettingsFile
+from yadori.infrastructure.setting import Setting
+from yadori.infrastructure.settings import Configuration, NotSettled, SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.infrastructure.state import StateReport
+from yadori.infrastructure.tools import ToolChoice
 
 USAGE = """使い方:
-  yadori                           宿りを起こして話す
+  yadori                           共通の優先順で道具を選び、宿りとして起こす
+  yadori setting                   人物・名乗り・道具順を対話で設定する
+  yadori chat                      専用の端末チャットで話す
   yadori claude                    宿りとして Claude Code を起こす
   yadori agy                       宿りとして agy を起こす
   yadori codex                     宿りとして Codex を起こす
@@ -54,8 +63,8 @@ USAGE = """使い方:
   --from は Claude Code の記録のディレクトリ（~/.claude/projects）や Codex の
   記録のディレクトリ（~/.codex/sessions）を指す。後の発話ごとに、宿りの思い出す
   仕組みで前の発話の候補を引き、その発話と候補だけを判定のため手元の
-  Claude Code へ渡す。Claude Code の記録は普段と同じ相手へ渡るが、Codex の
-  記録は判定のために別の相手へ渡ることになる。返事、時刻、作業場所は渡らず、
+  共通の優先順で選んだ道具へ渡す。記録元とは別の相手に渡ることがある。
+  選んだ相手は実行時に表示する。返事、時刻、作業場所は渡らず、
   記録を丸ごと渡すこともない。思い出す仕組みが拾えなかった組は下書きに
   出ないので手で足す。直近の範囲の組は測れないので足さない。--out は
   リポジトリの外を指す。--append を付けないときは、既にあるファイルには書かない。"""
@@ -74,26 +83,24 @@ class Entry:
     def run(self) -> int:
         """何をするかを選んで渡す。
 
-        - 引数が無ければ話す
+        - 引数が無ければ共通の優先順で対話する道具を起こす
         - measure なら測る
         - evals draft なら記録から評価セットの下書きを作る
         - それ以外は使い方を書く
         """
-        if self._argv == ["--help"]:
+        if not self._argv or self._argv[0] not in {"_claude-hook", "_codex-hook", "_agy-hook"}:
+            _ = os.environ.pop("YADORI_SETTINGS_SNAPSHOT", None)
+        if self._argv in (["--help"], ["-h"]):
             print(USAGE)
             return 0
-        if not self._argv:
-            return Startup().run()
-        if self._argv == ["claude"]:
-            return ClaudeCompanion().run()
+        if self._argv == ["setting"]:
+            return Setting().run()
+        if not self._argv or self._argv in (["claude"], ["codex"], ["agy"], ["chat"]):
+            return self._launch()
         if len(self._argv) == 3 and self._argv[0] == "_claude-hook":
             return ClaudeHook(self._argv[1], Path(self._argv[2])).run()
-        if self._argv == ["agy"]:
-            return AgyCompanion().run()
         if len(self._argv) == 3 and self._argv[0] == "_agy-hook":
             return AgyHook(self._argv[1], Path(self._argv[2])).run()
-        if self._argv == ["codex"]:
-            return CodexCompanion().run()
         if len(self._argv) == 3 and self._argv[0] == "_codex-hook":
             return CodexHook(self._argv[1], Path(self._argv[2])).run()
         if self._argv[0] == "measure":
@@ -109,6 +116,36 @@ class Entry:
         print(USAGE, file=sys.stderr)
         return 1
 
+    def _launch(self) -> int:
+        if not Setting().ensure():
+            return 1
+        try:
+            explicit = self._argv[0] if self._argv else None
+            if explicit == "chat":
+                return Startup().run()
+            name = ToolChoice().select("対話起動", explicit=explicit)
+            configuration = Configuration().load()
+            configuration.home.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=configuration.home, prefix="settings-run-") as run:
+                snapshot = Path(run).resolve() / "settings.toml"
+                _ = snapshot.write_text(tomlkit.dumps(configuration.data), encoding="utf-8")
+                before = os.environ.get("YADORI_SETTINGS_SNAPSHOT")
+                os.environ["YADORI_SETTINGS_SNAPSHOT"] = str(snapshot)
+                try:
+                    if name == "claude":
+                        return ClaudeCompanion().run()
+                    if name == "codex":
+                        return CodexCompanion().run()
+                    return AgyCompanion().run()
+                finally:
+                    if before is None:
+                        _ = os.environ.pop("YADORI_SETTINGS_SNAPSHOT", None)
+                    else:
+                        os.environ["YADORI_SETTINGS_SNAPSHOT"] = before
+        except (NotSettled, ToolCallFailed, OSError) as trouble:
+            print(trouble, file=sys.stderr)
+            return 1
+
     @staticmethod
     def console() -> int:
         """`yadori` 命令から呼ばれる入口。"""
@@ -121,6 +158,7 @@ class Entry:
         except NotSettled as missing:
             print(missing, file=sys.stderr)
             return 1
+        print("Discord の設定変更は再起動後に反映します", file=sys.stderr)
         return Startup().run(
             lambda turn, settings: DiscordPlace(
                 turn,

@@ -450,8 +450,8 @@ class TestST030004:
         assert out.read_text(encoding="utf-8") == before
 
     def test_ST_030_004_使い方にどの記録がどの相手へ渡るかが書かれている(self) -> None:
-        assert "別の相手へ渡ることになる" in USAGE
-        assert "Claude Code へ渡す" in USAGE
+        assert "別の相手に渡ることがある" in USAGE
+        assert "共通の優先順で選んだ道具へ渡す" in USAGE
         assert "記録を丸ごと渡すこともない" in USAGE
         assert "手で足す" in USAGE and "直近の範囲の組は測れないので足さない" in USAGE
 

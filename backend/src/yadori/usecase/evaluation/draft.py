@@ -70,11 +70,19 @@ class Drafting:
         self._fresh_memories: Callable[[], Memories] = fresh_memories
         self._how: HowToRecall = how
         self._resolving: Resolving = Resolving(how)
+        self._previous_judge: str | None = None
+        self._judge_used = False
 
     def drawn_with(self) -> DrawnWith:
         """何で候補を引き、何で判定するか。画面と下書きの前回の範囲に残す。"""
         return DrawnWith(
-            provenance=self._embeddings.provenance, how=self._how, judge=self._judge.name
+            provenance=self._embeddings.provenance,
+            how=self._how,
+            judge=(
+                self._previous_judge
+                if self._previous_judge is not None and not self._judge_used
+                else self._judge.name
+            ),
         )
 
     def run(self, places: Sequence[Path], out: Path) -> Draft:
@@ -88,6 +96,8 @@ class Drafting:
         - 組を解いて評価セットに組む
         - 指す先が揃っていることを確かめてから書く
         """
+        self._previous_judge = None
+        self._judge_used = False
         self._drafts.verify_writable(out)
         recorded, skipped = self._recorded(places)
         incoming = self._incoming([one for _, one in recorded], EMPTY_PREVIOUS)
@@ -114,6 +124,8 @@ class Drafting:
         - 合わせた評価セットの指す先が揃っていることを確かめてから、足す分だけを末尾に足す
         """
         previous_eval, before = self._drafts.read(out)
+        self._judge_used = False
+        self._previous_judge = before.drawn_with.judge
         self._refuse_if_differs(before, places)
         previous = Previous(
             exchanges=previous_eval.exchanges,
@@ -297,6 +309,13 @@ class Drafting:
         self, placed: Sequence[Placed], askings: Sequence[tuple[int, Asking]]
     ) -> list[Pair]:
         """問いをいくつかずつ判定に渡し、組の番号を全体の並びの番号へ直す。"""
+        if askings:
+            if self._previous_judge is not None and self._previous_judge != self._judge.name:
+                raise CannotDraft(
+                    "前回と判定の AIモデルが違うので追記できません。"
+                    + "新しいファイルへ作り直してください"
+                )
+            self._judge_used = True
         position = {one.utterance: index for index, one in enumerate(placed)}
         pairs: list[Pair] = []
         for start in range(0, len(askings), ASK_AT_MOST):

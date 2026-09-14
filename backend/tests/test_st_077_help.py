@@ -42,13 +42,16 @@ class TestHelp:
             "agy",
             "codex",
             "discord",
+            "setting",
+            "chat",
             "dream",
             "state",
             "measure",
             "evals draft",
         ):
             assert f"yadori {command}" in done.stdout
-        assert "宿りを起こして話す" in done.stdout
+        assert "共通の優先順で道具を選び" in done.stdout
+        assert "専用の端末チャット" in done.stdout
         for option in (
             "--at",
             "--eval",
