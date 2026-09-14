@@ -20,6 +20,7 @@ architecture=$(dpkg --print-architecture)
 [[ "$architecture" == amd64 ]] || { echo '対応 CPU は amd64 です' >&2; exit 1; }
 root=/tmp/package
 mkdir -p "$root/DEBIAN" "$root/usr/lib/yadori" "$root/usr/bin" /out
+install -Dm644 /src/LICENSE "$root/usr/share/doc/yadori/copyright"
 install -Dm644 /tmp/yadori.png "$root/usr/share/pixmaps/yadori.png"
 cp -a /usr/lib/yadori/venv "$root/usr/lib/yadori/venv"
 cat > "$root/usr/bin/yadori" <<'LAUNCHER'
