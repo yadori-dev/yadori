@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import final
 
 from yadori.adapter.embedding import Announcing, DefaultEmbeddings
+from yadori.adapter.importing.archive import SqliteArchive
 from yadori.adapter.place import CannotConnect, Place, Terminal
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.voice import WAIT_SECONDS, ClaudeCodeVoice
@@ -105,7 +106,12 @@ class Startup:
 
     def conversation(self, memories: SqliteMemories, settings: Settings) -> Conversation:
         """外の対話する道具へ、同じ思い出す口と覚える口を渡す。"""
-        return Conversation(memories, self.embeddings(settings), self._now)
+        return Conversation(
+            memories,
+            self.embeddings(settings),
+            self._now,
+            archive=SqliteArchive(settings.memories_path),
+        )
 
     def embeddings(self, settings: Settings) -> Embeddings:
         """宿りが使う埋め込み。既定の工場が組む。"""

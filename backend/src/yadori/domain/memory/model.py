@@ -10,7 +10,10 @@ import zlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from yadori.domain.importing.model import ExternalFound
 
 Vector = tuple[float, ...]
 
@@ -358,3 +361,4 @@ class Recollection:
     state: State
     dream: Dreamed | None
     recalled_at: datetime
+    external: tuple[ExternalFound, ...] = ()

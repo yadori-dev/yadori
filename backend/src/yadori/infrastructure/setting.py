@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import TextIO, final
 
+from yadori.infrastructure.preparation_settings import PreparationSetting
 from yadori.infrastructure.settings import (
     DEFAULT_PRIORITY,
     Configuration,
@@ -86,9 +87,9 @@ class Setting:
             person = configuration.person()
             self._say(f"\n現在の人物: {person.get('name')}（呼び名: {person.get('nickname')}）")
             self._say("1 名前を変更する\n2 性格を変更する\n3 別の人物へ切り替える")
-            self._say("4 デフォルトのモデル順を変更する\n5 終了する")
+            self._say("4 デフォルトのモデル順を変更する\n5 終了する\n6 起動前の取り込みと夢を選ぶ")
             try:
-                choice = self._line("何を変更しますか？ [1-5]: ")
+                choice = self._line("何を変更しますか？ [1-6]: ")
                 if choice == "5":
                     return
                 changed = configuration.copy()
@@ -100,10 +101,12 @@ class Setting:
                     changed.put_person(person)
                 elif choice == "3":
                     self._switch(changed)
+                elif choice == "6":
+                    PreparationSetting(self._reading, self._writing).configure(changed)
                 elif choice == "4":
                     changed.data["priority"] = list(self._order(changed))
                 else:
-                    self._say("1 から 5 を入力してください")
+                    self._say("1 から 6 を入力してください")
                     continue
                 changed.validate()
                 if self._save(changed):

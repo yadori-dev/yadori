@@ -23,7 +23,10 @@ from yadori.infrastructure.claude import ClaudeCompanion, ClaudeHook
 from yadori.infrastructure.codex import CodexCompanion, CodexHook
 from yadori.infrastructure.draft import Drafter
 from yadori.infrastructure.dream import Dreamer
+from yadori.infrastructure.importing import Importer, ImportSource
 from yadori.infrastructure.measure import Measure
+from yadori.infrastructure.preparation_settings import Mode
+from yadori.infrastructure.preparing import Preparing
 from yadori.infrastructure.setting import Setting
 from yadori.infrastructure.settings import Configuration, NotSettled, SettingsFile
 from yadori.infrastructure.start import Startup
@@ -39,6 +42,11 @@ USAGE = """使い方:
   yadori codex                     宿りとして Codex を起こす
   yadori discord                   Discord で話しかけられるのを待つ
       トークンは YADORI_HOME の discord.toml に置く
+  yadori [claude/codex/agy/chat] [--prepare auto/ask/skip]
+      起動前の取り込みと夢を自動・今回選ぶ・今回は飛ばすに切り替える。
+      人物ごとの既定動作と取り込み元は yadori setting で選ぶ。
+  yadori import TOOL --from PATH --person ID [--apply]
+      通常の claude/codex/agy の原文を確認し、--apply のときだけ取り込む。
   yadori dream                     前回の夢より後の記憶を読み直し、気づきを一つ残す
   yadori state [--at 時刻]         いまの気持ちと性格と、動きの時系列を読む
       --at に ISO 形式の時刻を指すと、その時点の値
@@ -74,6 +82,19 @@ USAGE = """使い方:
 class Entry:
     def __init__(self, argv: list[str], choosing: Choosing | None = None) -> None:
         self._argv: list[str] = argv[1:]
+        self._preparation: Mode | None = None
+        if self._argv.count("--prepare") == 1:
+            position = self._argv.index("--prepare")
+            if position + 1 < len(self._argv) and self._argv[position + 1] in {
+                "auto",
+                "ask",
+                "skip",
+            }:
+                value = self._argv[position + 1]
+                self._preparation = (
+                    "auto" if value == "auto" else ("ask" if value == "ask" else "skip")
+                )
+                del self._argv[position : position + 2]
         # 会話と同じ `YADORI_HOME` の下の `models/` を取得先にし、取得の前触れは標準出力へ出す。
         # 測った結果の書き先とは別である。
         self._choosing: Choosing = choosing or Choosing(
@@ -93,6 +114,7 @@ class Entry:
             "_codex-hook",
             "_agy-hook",
             "_memory-mcp",
+            "_prepare-step",
         }:
             _ = os.environ.pop("YADORI_SETTINGS_SNAPSHOT", None)
         if self._argv in (["--help"], ["-h"]):
@@ -102,6 +124,16 @@ class Entry:
             from yadori.infrastructure.memory_mcp import MemoryMCP
 
             return MemoryMCP.run(Path(self._argv[1]))
+        if (
+            len(self._argv) == 2
+            and self._argv[0] == "_prepare-step"
+            and self._argv[1] in {"import", "dream"}
+        ):
+            try:
+                return Preparing.worker(self._argv[1])
+            except (NotSettled, KeyboardInterrupt) as trouble:
+                print(f"準備を終了します: {trouble}", file=sys.stderr)
+                return 1
         if self._argv == ["setting"]:
             return Setting().run()
         if not self._argv or self._argv in (["claude"], ["codex"], ["agy"], ["chat"]):
@@ -112,6 +144,8 @@ class Entry:
             return AgyHook(self._argv[1], Path(self._argv[2])).run()
         if len(self._argv) == 3 and self._argv[0] == "_codex-hook":
             return CodexHook(self._argv[1], Path(self._argv[2])).run()
+        if self._argv[0] == "import":
+            return self._import()
         if self._argv[0] == "measure":
             return self._measure()
         if self._argv[0] == "state":
@@ -130,10 +164,11 @@ class Entry:
             return 1
         try:
             explicit = self._argv[0] if self._argv else None
-            if explicit == "chat":
-                return Startup().run()
-            name = ToolChoice().select("対話起動", explicit=explicit)
-            configuration = Configuration().load()
+            name = (
+                "chat" if explicit == "chat" else ToolChoice().select("対話起動", explicit=explicit)
+            )
+            preparing = Preparing()
+            configuration = preparing.configure(Configuration().load(), self._preparation)
             configuration.home.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(dir=configuration.home, prefix="settings-run-") as run:
                 snapshot = Path(run).resolve() / "settings.toml"
@@ -141,6 +176,10 @@ class Entry:
                 before = os.environ.get("YADORI_SETTINGS_SNAPSHOT")
                 os.environ["YADORI_SETTINGS_SNAPSHOT"] = str(snapshot)
                 try:
+                    if not preparing.run(configuration, SettingsFile().read(), self._preparation):
+                        return 1
+                    if name == "chat":
+                        return Startup().run()
                     if name == "claude":
                         return ClaudeCompanion().run()
                     if name == "codex":
@@ -264,3 +303,39 @@ class Entry:
             except ValueError:
                 return None
         return HowToRecall(recent_turns=recent, found_limit=limit, relevance_floor=floor)
+
+    def _import(self) -> int:
+        args = self._argv[1:]
+        if not args or args[0] not in {"claude", "codex", "agy"}:
+            print(USAGE, file=sys.stderr)
+            return 1
+        provider = "claude" if args[0] == "claude" else ("codex" if args[0] == "codex" else "agy")
+        sources: list[ImportSource] = []
+        person: str | None = None
+        apply = False
+        cursor = 1
+        while cursor < len(args):
+            name = args[cursor]
+            if name == "--apply" and not apply:
+                apply = True
+                cursor += 1
+                continue
+            if name not in {"--from", "--person"} or cursor + 1 >= len(args):
+                print(USAGE, file=sys.stderr)
+                return 1
+            value = args[cursor + 1]
+            if name == "--from":
+                sources.append(ImportSource(provider, Path(value)))
+            elif person is None:
+                person = value
+            else:
+                print(USAGE, file=sys.stderr)
+                return 1
+            cursor += 2
+        if not sources or not person:
+            print(USAGE, file=sys.stderr)
+            return 1
+        try:
+            return Importer().run(sources, person, apply)
+        except KeyboardInterrupt:
+            return 130

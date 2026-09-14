@@ -1,0 +1,2 @@
+{"step_index": 0, "source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE", "created_at": "2026-09-14T05:38:22Z", "content": "<USER_REQUEST>\n架空の検証用会話です。試験記録の保管方針を決めます。分類ラベルは「星砂」、月ごとに分け、21日で削除し外部公開しません。この決定を短く復唱してください。道具は使わないでください。\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nfixture\n</ADDITIONAL_METADATA>"}
+{"step_index": 1, "source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "created_at": "2026-09-14T05:38:25Z", "content": "承知いたしました。決定事項を以下の通り復唱します。\n\n* **分類ラベル**: 星砂\n* **管理単位**: 月ごとに分割\n* **保存期間**: 21日で削除\n* **公開設定**: 外部非公開"}
