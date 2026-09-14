@@ -62,8 +62,11 @@ def test_ST_091_002_IT_091_001_不完全な付加文や別の発話を飛び越�
         )
         meta["message"] = {"role": "user", "content": content}
     result = ClaudeRecords().read(rows)
-    assert not result.conversations
-    assert result.notices
+    if missing == "prefix":
+        assert len(result.conversations) == 1
+    else:
+        assert not result.conversations
+        assert result.notices
 
 
 def test_ST_091_007_思考だけなら未完の通知を残す() -> None:

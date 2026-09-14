@@ -71,7 +71,7 @@ class Preparing:
                     if not enabled:
                         continue
                     label = (
-                        "外部会話の取り込み（新規200往復まで）"
+                        "外部会話の取り込み（未取り込みの全往復）"
                         if step == "import"
                         else "自身の会話の夢（一回分）"
                     )
@@ -100,7 +100,7 @@ class Preparing:
             return 0
         if step == "import":
             return Importer(settings.home).run(
-                options.sources, settings.dweller.id, True, 200, settings
+                options.sources, settings.dweller.id, True, settings=settings
             )
         return Dreamer(settings.home).run(settings)
 
