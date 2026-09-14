@@ -56,7 +56,9 @@ class RecordJson:
             raise ImportFailed("元の時刻と時差を確認できません") from trouble
 
     @staticmethod
-    def rows(path: Path) -> tuple[list[dict[str, object]], list[str]]:
+    def rows(
+        path: Path, *, claude_management: bool = False
+    ) -> tuple[list[dict[str, object]], list[str]]:
         with path.open("rb") as stream:
             raw = stream.read(os.fstat(stream.fileno()).st_size)
         lines = raw.splitlines()
@@ -64,6 +66,14 @@ class RecordJson:
         notices: list[str] = []
         for index, line in enumerate(lines):
             if not line.strip():
+                continue
+            if claude_management and line.startswith(b"\x00"):
+                managed, padding = RecordJson._management_row(line, path, index + 1)
+                rows.append(managed)
+                notices.append(
+                    f"Claude管理行 {index + 1}: 先頭のNUL埋め {padding} バイトを無視しました"
+                    + "（元ファイルは変更していません）"
+                )
                 continue
             try:
                 value: object = json.loads(line)  # pyright: ignore[reportAny]
@@ -79,12 +89,32 @@ class RecordJson:
             rows.append(RecordJson.mapping(value))  # pyright: ignore[reportUnknownArgumentType]
         return rows, notices
 
+    @staticmethod
+    def _management_row(line: bytes, path: Path, number: int) -> tuple[dict[str, object], int]:
+        content = line.lstrip(b"\x00")
+        try:
+            value: object = json.loads(content)  # pyright: ignore[reportAny]
+            row = RecordJson.mapping(value)
+            fields = {"type", "lastPrompt", "leafUuid", "sessionId"}
+            if (
+                set(row) != fields
+                or row.get("type") != "last-prompt"
+                or not all(isinstance(row[key], str) for key in fields)
+            ):
+                raise ValueError
+        except (ValueError, UnicodeError) as trouble:
+            raise ImportFailed(
+                f"{path.name}:{number}: NUL付きの行を既知の管理記録として読めません"
+            ) from trouble
+        return row, len(line) - len(content)
+
 
 class ClaudeRecords:
     def read(self, rows: list[dict[str, object]]) -> LogContents:
         known: dict[str, dict[str, object]] = {}
         users: dict[str, dict[str, object]] = {}
         complete: dict[str, ExternalConversation] = {}
+        held: dict[str, list[ExternalConversation]] = {}
         notices: list[str] = []
         for row in rows:
             identifier = RecordJson.text(row, "uuid")
@@ -124,16 +154,27 @@ class ClaudeRecords:
                 and self._user(previous)
                 else None,
             )
+            if turn in held:
+                if result not in held[turn]:
+                    held[turn].append(result)
+                continue
             if turn in complete and complete[turn] != result:
-                raise ImportFailed(
-                    "Claude: 一つの発話に複数の完成応対があります。分岐を分けて指定してください"
-                )
+                held[turn] = [complete.pop(turn), result]
+                continue
             complete[turn] = result
         if not any("sessionId" in row for row in rows):
             raise ImportFailed("Claudeのセッション原文ではありません")
-        if pending := len(users.keys() - complete.keys()):
+        if pending := len(users.keys() - complete.keys() - held.keys()):
             notices.append(f"Claude: 未完または対応不能の発話 {pending} 件は次回へ残しました")
-        return LogContents(tuple(complete.values()), tuple(notices))
+        if held:
+            notices.append(
+                f"Claude: 複数の完成応対がある {len(held)} 発話を保留しました"
+                + "（今回の取り込みと既存記録の照合は行いません）"
+            )
+        originals = tuple(complete.values())
+        return LogContents(
+            originals, tuple(notices), tuple(one for group in held.values() for one in group)
+        )
 
     def _content(self, row: dict[str, object]) -> str:
         return RecordJson.parts(RecordJson.mapping(row.get("message")).get("content"))
@@ -374,7 +415,7 @@ class AgyRecords:
 
 class SessionLogs:
     def read(self, provider: Provider, path: Path) -> LogContents:
-        rows, notices = RecordJson.rows(path)
+        rows, notices = RecordJson.rows(path, claude_management=provider == "claude")
         if provider == "claude":
             result = ClaudeRecords().read(rows)
         elif provider == "codex":
@@ -389,7 +430,7 @@ class SessionLogs:
                     "agyは会話別の.system_generated/logs/transcript_full.jsonlを指定してください"
                 )
             result = AgyRecords().read(rows, path.parent.parent.parent.name)
-        return LogContents(result.conversations, (*notices, *result.notices))
+        return LogContents(result.conversations, (*notices, *result.notices), result.held)
 
     def files(self, provider: Provider, path: Path) -> tuple[Path, ...]:
         if path.is_file():

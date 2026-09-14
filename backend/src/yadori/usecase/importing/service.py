@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import final
 
-from yadori.domain.importing.model import ExternalConversation, ImportFailed
+from yadori.domain.importing.model import ExternalConversation, ImportFailed, LogContents
 from yadori.domain.importing.ports import Archive
 from yadori.domain.memory import Embeddings
 
@@ -16,6 +16,8 @@ class ImportPlan:
     added: tuple[ExternalConversation, ...]
     existing: int
     native: int
+    held: int = 0
+    dependent: int = 0
 
 
 @final
@@ -24,6 +26,35 @@ class Importing:
         self._archive = archive
         self._person = person
         self.saved = 0
+
+    def preview_logs(self, logs: Sequence[LogContents]) -> ImportPlan:
+        seen: dict[str, set[ExternalConversation]] = {}
+        held: set[str] = set()
+        originals: list[ExternalConversation] = []
+        for log in logs:
+            groups: dict[str, set[ExternalConversation]] = {}
+            for record in (*log.conversations, *log.held):
+                groups.setdefault(record.source, set()).add(record)
+            for source, candidates in groups.items():
+                if source in seen and seen[source] != candidates:
+                    raise ImportFailed(f"複数ファイルで同じ出典の応対が一致しません: {source}")
+                seen[source] = candidates
+            held.update(record.source for record in log.held)
+            originals.extend(log.conversations)
+        ambiguous = len(held)
+        following: dict[str, set[str]] = {}
+        for one in originals:
+            if one.previous is not None:
+                previous = f"{one.provider}:{one.session}:{one.previous}"
+                following.setdefault(previous, set()).add(one.source)
+        pending = list(held)
+        while pending:
+            for source in following.get(pending.pop(), set()):
+                if source not in held:
+                    held.add(source)
+                    pending.append(source)
+        plan = self.preview([one for one in originals if one.source not in held])
+        return replace(plan, held=len(held), dependent=len(held) - ambiguous)
 
     def preview(self, conversations: Sequence[ExternalConversation]) -> ImportPlan:
         seen: dict[str, ExternalConversation] = {}
