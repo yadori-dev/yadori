@@ -419,6 +419,22 @@ class SqliteMemories:
         ):
             raise RememberingConflict(f"同じ一往復へ異なる気持ちの動きが届いた: {episode_id}")
 
+    def episode_for(self, dweller_id: str, episode_id: int) -> Episode | None:
+        row = self._one(
+            "SELECT * FROM episode WHERE dweller_id=? AND id=?", (dweller_id, episode_id)
+        )
+        return None if row is None else self._as_episode(row)
+
+    def following(self, dweller_id: str, episode: Episode) -> tuple[Episode, ...]:
+        if episode.source is None or episode.session_id is None:
+            return ()
+        rows = self._all(
+            "SELECT * FROM episode WHERE dweller_id=? AND session_id=? AND previous_source=?"
+            + " ORDER BY id LIMIT 2",
+            (dweller_id, episode.session_id, episode.source),
+        )
+        return tuple(self._as_episode(row) for row in rows)
+
     def episode_from_source(self, dweller_id: str, source: str) -> Episode | None:
         return self._episode_from_source(dweller_id, source)
 

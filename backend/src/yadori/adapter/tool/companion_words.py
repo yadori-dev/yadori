@@ -53,9 +53,13 @@ class CompanionWords(ABC):
         lines.append(f"\n{HOW_TO_TELL}")
         return "\n".join(lines)
 
-    def hook_response(self, recollection: Recollection, limit: int = 9000) -> str:
+    def hook_response(
+        self, recollection: Recollection, limit: int = 9000, instructions: str = ""
+    ) -> str:
         """優先順に文脈を残し、フックが返す JSON 全体を上限へ収める。"""
         base = self.identity_and_state(recollection) + "\n" + HOW_TO_TELL
+        if instructions:
+            base += "\n" + instructions
         if self._size(base) > limit:
             raise CannotSpeak("宿りの名乗りと状態だけでフック上限を超えた")
         pieces = [base]

@@ -10,6 +10,7 @@ from typing import Protocol, final
 
 from yadori.adapter.tool import ClaudeCodeCall, ToolCallFailed
 from yadori.adapter.tool.agy_call import AgyCall
+from yadori.adapter.tool.agy_session import SUPPORTED_AGY_VERSIONS
 from yadori.adapter.tool.codex_call import CodexCall
 from yadori.infrastructure.settings import DEFAULT_MODEL, Configuration, NotSettled
 
@@ -63,8 +64,11 @@ class ToolChoice:
                 ) from trouble
             if version.returncode:
                 raise ToolCallFailed("agy の版の確認が失敗しました。別の道具へは再送しません")
-            if not version.stdout.splitlines() or version.stdout.splitlines()[0] != "1.2.1:":
-                return "設定・履歴の分離を確認済みなのは agy 1.2.1 です。この版は未対応です"
+            if (
+                not version.stdout.splitlines()
+                or version.stdout.splitlines()[0] not in SUPPORTED_AGY_VERSIONS
+            ):
+                return "対応する agy は 1.2.1 / 1.2.2 です。この版は未対応です"
         if internal:
             argv = [name, "exec", "--help"] if name == "codex" else [name, "--help"]
             try:

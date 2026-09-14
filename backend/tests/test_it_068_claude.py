@@ -222,7 +222,11 @@ def test_IT_068_001_普段の設定から安全な範囲だけを一回の起動
         assert borrowed["enabledPlugins"] == {"safe@market": True, "mcp@market": True}
         permissions = borrowed["permissions"]
         assert isinstance(permissions, dict)
-        assert permissions["allow"] == [f"Read(//{usual.as_posix().lstrip('/')}/notes/**)"]
+        assert permissions["allow"] == [
+            f"Read(//{usual.as_posix().lstrip('/')}/notes/**)",
+            "mcp__yadori_memory__recall_search",
+            "mcp__yadori_memory__recall_get",
+        ]
         base = nested.as_posix().lstrip("/")
         assert permissions["deny"] == [
             f"Write(//{base}/secrets/**)",
@@ -238,6 +242,9 @@ def test_IT_068_001_普段の設定から安全な範囲だけを一回の起動
         }
         assert str(Path(sys.executable).with_name("yadori").resolve()) in json.dumps(required)
         assert " -m yadori " not in json.dumps(required)
+        servers = _mapping(mcp["mcpServers"])
+        assert "yadori_memory" in servers
+        mcp["mcpServers"] = {key: value for key, value in servers.items() if key != "yadori_memory"}
         assert mcp == {
             "mcpServers": {
                 "user": {"command": "user-server"},
@@ -507,6 +514,9 @@ def test_IT_068_001_worktreeは元の作業場所の信頼と手元設定を借�
         mcp = _object(prepared.run_dir / "mcp.json")
         assert set(state) == {str(main)}
         assert permissions["deny"] == [f"Read(//{worktree.as_posix().lstrip('/')}/private/**)"]
+        servers = _mapping(mcp["mcpServers"])
+        assert "yadori_memory" in servers
+        mcp["mcpServers"] = {key: value for key, value in servers.items() if key != "yadori_memory"}
         assert mcp == {"mcpServers": {"worktree-local": {"command": "local-server"}}}
         assert (prepared.run_dir / "skills" / "from-worktree" / "SKILL.md").is_file()
     finally:

@@ -93,6 +93,7 @@ def test_ST_078_002_IT_078_002_同じ通知は一往復だけ残し同文の別�
     assert probe.count() == 1
     rows = [dict(row, step_index=AgyJson.number(row, "step_index") + 10) for row in probe.rows]
     probe.write([*probe.rows, rows[0]])
+    probe.pre["initialNumSteps"] = 11
     assert probe.call("pre", monkeypatch)[0] == 0
     probe.write([*probe.rows, *rows])
     assert probe.call("stop", monkeypatch)[0] == 0

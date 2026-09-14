@@ -137,6 +137,19 @@ class InMemoryMemories:
         self._kept.next_id += 1
         return episode
 
+    def episode_for(self, dweller_id: str, episode_id: int) -> Episode | None:
+        found = self._kept.episodes.get(episode_id)
+        return found[1] if found is not None and found[0] == dweller_id else None
+
+    def following(self, dweller_id: str, episode: Episode) -> tuple[Episode, ...]:
+        if episode.source is None or episode.session_id is None:
+            return ()
+        return tuple(
+            one
+            for one in self._owned(dweller_id)
+            if one.session_id == episode.session_id and one.previous_source == episode.source
+        )[:2]
+
     def episode_from_source(self, dweller_id: str, source: str) -> Episode | None:
         return self._episode_from_source(dweller_id, source)
 

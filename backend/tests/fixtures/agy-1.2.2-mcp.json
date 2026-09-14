@@ -1,0 +1,60 @@
+{
+  "observed_version": "1.2.2",
+  "observed_on": "2026-09-14",
+  "source": "agy installed CLI and builtin hooks documentation",
+  "mcp_tool": {
+    "artifactDirectoryPath": "観測時の専用領域",
+    "conversationId": "39a3272c-cdec-4646-ab64-cca42be6de9b",
+    "modelName": "gemini-3.8-flash-high",
+    "stepIdx": 15,
+    "toolCall": {
+      "args": {
+        "Arguments": {
+          "query": "確認",
+          "turn": "probe"
+        },
+        "ServerName": "yadori_memory",
+        "ToolName": "recall_search",
+        "toolAction": "recall_search を実行",
+        "toolSummary": "recall_search の試験実行"
+      },
+      "name": "call_mcp_tool"
+    },
+    "transcriptPath": "観測時の専用領域",
+    "workspacePaths": [
+      "/tmp/recall-check"
+    ]
+  },
+  "pre_boundaries": [
+    [
+      1,
+      0
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      13,
+      1
+    ],
+    [
+      16,
+      2
+    ]
+  ],
+  "stop_execution_numbers": [
+    0,
+    0,
+    0
+  ],
+  "redactions": "専用領域と作業場所を置換。思考欄は含めない。"
+}
