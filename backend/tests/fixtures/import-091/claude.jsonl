@@ -1,0 +1,22 @@
+{"type": "queue-operation", "timestamp": "2026-09-14T05:35:50.572Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "queue-operation", "timestamp": "2026-09-14T05:35:50.576Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": null, "isSidechain": false, "type": "user", "uuid": "0f545723-8904-4e4b-87da-73f64accd3e8", "timestamp": "2026-09-14T05:35:50.837Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4", "message": {"role": "user", "content": "架空の検証用会話です。試験記録の保管方針を決めます。分類ラベルは「星砂」、月ごとに分け、21日で削除し外部公開しません。この決定を短く復唱してください。道具は使わないでください。"}}
+{"parentUuid": "0f545723-8904-4e4b-87da-73f64accd3e8", "isSidechain": false, "type": "attachment", "uuid": "ea46e461-c517-45b2-9003-302263633730", "timestamp": "2026-09-14T05:35:50.830Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "ea46e461-c517-45b2-9003-302263633730", "isSidechain": false, "type": "attachment", "uuid": "06ec13ff-4d6f-4e32-870b-eff7e1dfcde1", "timestamp": "2026-09-14T05:35:50.831Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "06ec13ff-4d6f-4e32-870b-eff7e1dfcde1", "isSidechain": false, "type": "attachment", "uuid": "66c3a6f0-bd63-45b0-88f3-6cd4d0a44a74", "timestamp": "2026-09-14T05:35:50.832Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "66c3a6f0-bd63-45b0-88f3-6cd4d0a44a74", "isSidechain": false, "type": "attachment", "uuid": "7d755697-3b46-4b5c-aff8-2fd84384aa56", "timestamp": "2026-09-14T05:35:50.832Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "7d755697-3b46-4b5c-aff8-2fd84384aa56", "isSidechain": false, "type": "attachment", "uuid": "b91d2ef9-9f2e-45b2-94ff-e5dbf075c670", "timestamp": "2026-09-14T05:35:50.832Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "b91d2ef9-9f2e-45b2-94ff-e5dbf075c670", "isSidechain": false, "type": "attachment", "uuid": "68c13421-cc3f-445d-b64f-47bea5a3d343", "timestamp": "2026-09-14T05:35:50.832Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "atis-latch", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "68c13421-cc3f-445d-b64f-47bea5a3d343", "isSidechain": false, "type": "attachment", "uuid": "0474eb4c-b86b-4925-9341-ad71c7cd394c", "timestamp": "2026-09-14T05:35:50.947Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "0474eb4c-b86b-4925-9341-ad71c7cd394c", "isSidechain": false, "type": "attachment", "uuid": "fa483759-5fe6-44c9-a11e-598488a3554c", "timestamp": "2026-09-14T05:35:50.948Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "fa483759-5fe6-44c9-a11e-598488a3554c", "isSidechain": false, "type": "attachment", "uuid": "850e5e49-583f-40a7-a86c-64c30fce0587", "timestamp": "2026-09-14T05:35:50.954Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "850e5e49-583f-40a7-a86c-64c30fce0587", "isSidechain": false, "type": "attachment", "uuid": "5ecd94b1-5bb9-4805-916c-9b0ebd12b398", "timestamp": "2026-09-14T05:35:50.954Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "last-prompt", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "atis-latch", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "ai-title", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"parentUuid": "5ecd94b1-5bb9-4805-916c-9b0ebd12b398", "isSidechain": false, "type": "assistant", "uuid": "eb54f6f8-910a-42c9-b63d-d2d944fa5361", "timestamp": "2026-09-14T05:35:55.035Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4", "message": {"role": "assistant", "stop_reason": "end_turn", "content": [{"type": "text", "text": "了解しました。復唱します。\n\n- **分類ラベル**: 「星砂」\n- **保管の単位**: 月ごとに分割\n- **保持期間**: 21日で削除\n- **公開範囲**: 外部公開なし\n\n架空の検証用という前提で承知しました。この決定を記録に残す必要があれば、その旨お知らせください。"}]}}
+{"parentUuid": "eb54f6f8-910a-42c9-b63d-d2d944fa5361", "isSidechain": false, "type": "attachment", "uuid": "1acbde73-2633-401a-a505-d621d8b6c783", "timestamp": "2026-09-14T05:35:55.125Z", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "last-prompt", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "ai-title", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}
+{"type": "atis-latch", "sessionId": "5fcc48b4-3f41-4eb8-bf74-8357f5aeb5c4"}

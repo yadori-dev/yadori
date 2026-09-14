@@ -16,7 +16,7 @@ from yadori.adapter.store import SqliteMemories
 from yadori.domain.dream import CannotDream, Summarizing
 from yadori.domain.dream.clarification import Explaining
 from yadori.domain.memory import Embeddings, EmbeddingsUnavailable, HowToRecall, NameNotDeclared
-from yadori.infrastructure.settings import NotSettled, SettingsFile
+from yadori.infrastructure.settings import NotSettled, Settings, SettingsFile
 from yadori.infrastructure.start import Startup
 from yadori.infrastructure.tools import SelectedCall
 from yadori.usecase.dream import Dreaming, Dreamt, NothingKept, NothingNew
@@ -48,13 +48,13 @@ class Dreamer:
         self._how: HowToRecall | None = how
         self._writing: TextIO = writing or sys.stdout
 
-    def run(self) -> int:
+    def run(self, settings: Settings | None = None) -> int:
         """夢を見て、結果を書く。
 
         設定が無い、要点を書けない、名乗りが無い、埋め込みが使えないときは理由を書いて 1。
         """
         try:
-            settings = self._settings_file.read()
+            settings = settings or self._settings_file.read()
         except NotSettled as missing:
             print(missing, file=sys.stderr)
             return 1

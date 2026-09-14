@@ -22,6 +22,7 @@ from yadori.domain.recall.model import (
     Problem,
     RecallFailure,
 )
+from yadori.domain.recall.ports import RecordKind
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS binding (dweller TEXT NOT NULL);
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS turns (
 );
 CREATE TABLE IF NOT EXISTS refs (
     turn TEXT NOT NULL, token TEXT PRIMARY KEY, episode INTEGER NOT NULL,
-    document TEXT, progress INTEGER NOT NULL DEFAULT 0, UNIQUE(turn,episode)
+    kind TEXT NOT NULL DEFAULT 'episode',
+    document TEXT, progress INTEGER NOT NULL DEFAULT 0, UNIQUE(turn,episode,kind)
 );
 CREATE TABLE IF NOT EXISTS attempts (
     id INTEGER PRIMARY KEY, turn TEXT NOT NULL, operation TEXT NOT NULL,
@@ -184,23 +186,27 @@ class RecallLedger:
                 raise RecallFailure("unavailable", "自動提示候補を読めません")
             return frozenset(self._number(one) for one in values)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
 
-    def refer(self, turn: str, episode_id: int) -> str:
+    def refer(self, turn: str, episode_id: int, kind: RecordKind = "episode") -> str:
         with self._connect() as connection:
             _ = connection.execute("BEGIN IMMEDIATE")
             _ = self._active(connection, turn)
             token = uuid.uuid4().hex
             _ = connection.execute(
-                "INSERT OR IGNORE INTO refs(turn,token,episode) VALUES (?,?,?)",
-                (turn, token, episode_id),
+                "INSERT OR IGNORE INTO refs(turn,token,episode,kind) VALUES (?,?,?,?)",
+                (turn, token, episode_id, kind),
             )
             row = self._one(
-                connection, "SELECT token FROM refs WHERE turn=? AND episode=?", (turn, episode_id)
+                connection,
+                "SELECT token FROM refs WHERE turn=? AND episode=? AND kind=?",
+                (turn, episode_id, kind),
             )
             if row is None:
                 raise RecallFailure("unavailable", "参照を残せません")
             return row.text("token")
 
-    def document(self, turn: str, reference: str, make: Callable[[int], str]) -> tuple[str, int]:
+    def document(
+        self, turn: str, reference: str, make: Callable[[int, RecordKind], str]
+    ) -> tuple[str, int]:
         with self._connect() as connection:
             _ = self._active(connection, turn)
             row = self._reference(connection, turn, reference)
@@ -208,7 +214,10 @@ class RecallLedger:
             if text is not None:
                 return text, row.number("progress")
             episode_id = row.number("episode")
-        text = make(episode_id)
+            kind = row.text("kind")
+        if kind not in {"episode", "external"}:
+            raise RecallFailure("invalid_reference", "記録の種別が不正です")
+        text = make(episode_id, "episode" if kind == "episode" else "external")
         with self._connect() as connection:
             _ = connection.execute("BEGIN IMMEDIATE")
             _ = self._active(connection, turn)
@@ -265,8 +274,8 @@ class TurnReferences:
     def suggested(self) -> frozenset[int]:
         return self._ledger.suggested(self._turn)
 
-    def refer(self, episode_id: int) -> str:
-        return self._ledger.refer(self._turn, episode_id)
+    def refer(self, episode_id: int, kind: RecordKind = "episode") -> str:
+        return self._ledger.refer(self._turn, episode_id, kind)
 
-    def document(self, reference: str, make: Callable[[int], str]) -> tuple[str, int]:
+    def document(self, reference: str, make: Callable[[int, RecordKind], str]) -> tuple[str, int]:
         return self._ledger.document(self._turn, reference, make)

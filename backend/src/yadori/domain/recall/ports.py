@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Literal, Protocol
+
+RecordKind = Literal["episode", "external"]
 
 
 class References(Protocol):
     @property
     def suggested(self) -> frozenset[int]: ...
 
-    def refer(self, episode_id: int) -> str: ...
+    def refer(self, episode_id: int, kind: RecordKind = "episode") -> str: ...
 
-    def document(self, reference: str, make: Callable[[int], str]) -> tuple[str, int]: ...
+    def document(
+        self, reference: str, make: Callable[[int, RecordKind], str]
+    ) -> tuple[str, int]: ...

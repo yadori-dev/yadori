@@ -15,6 +15,7 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 from yadori.adapter.embedding import DefaultEmbeddings
+from yadori.adapter.importing.archive import SqliteArchive
 from yadori.adapter.recall.ledger import RecallLedger, TurnReferences
 from yadori.adapter.store import SqliteMemories
 from yadori.domain.memory import EmbeddingsUnavailable
@@ -111,7 +112,10 @@ class MemoryMCP:
             if memories.dweller(settings.dweller.id) is None:
                 raise NotSettled("起動した人物の記憶がありません")
             reading = Reading(
-                memories, DefaultEmbeddings()(settings.models_path), settings.dweller.id
+                memories,
+                DefaultEmbeddings()(settings.models_path),
+                settings.dweller.id,
+                SqliteArchive(settings.memories_path),
             )
             MemoryTools(ledger, reading).server().run(transport="stdio")
             return 0

@@ -14,6 +14,8 @@ from datetime import datetime
 from typing import final
 
 from yadori.domain.dream.clarification import REVISION
+from yadori.domain.importing.model import ExternalFound
+from yadori.domain.importing.ports import Archive
 from yadori.domain.memory import (
     Dreamed,
     Embeddings,
@@ -29,7 +31,7 @@ from yadori.domain.memory import (
     State,
     Vector,
 )
-from yadori.usecase.conversation.finding import Finding
+from yadori.usecase.importing.searching import Searching
 
 
 @final
@@ -42,7 +44,9 @@ class Conversation:
         embeddings: Embeddings | Sequence[Embeddings],
         now: Callable[[], datetime],
         how: HowToRecall | None = None,
+        archive: Archive | None = None,
     ) -> None:
+        self._archive = archive
         self._memories: Memories = memories
         self._ways: tuple[Embeddings, ...] = (
             tuple(embeddings) if isinstance(embeddings, Sequence) else (embeddings,)
@@ -66,7 +70,11 @@ class Conversation:
         recalled_at = self._now()
         identity = self._declared_identity(dweller_id)
         recent = self._recent(dweller_id)
-        found = self._found_beyond(dweller_id, utterance, recent)
+        candidates = Searching(self._memories, self._archive, self._how).find(
+            self._ways, dweller_id, utterance, [one.id for one in recent]
+        )
+        found = tuple(one for one in candidates if isinstance(one, Found))
+        external = tuple(one for one in candidates if isinstance(one, ExternalFound))
         state = self.state(dweller_id, recalled_at)
         dream = self._dreamed(dweller_id)
         self._record_retrieval(found, recalled_at)
@@ -77,6 +85,7 @@ class Conversation:
             state=state,
             dream=dream,
             recalled_at=recalled_at,
+            external=external,
         )
 
     def remember(
@@ -153,6 +162,16 @@ class Conversation:
                     way.to_remember(record.searchable(episode)),
                 )
                 rebuilt += 1
+        if self._archive is not None:
+            for way in self._ways:
+                for record in self._archive.unindexed(dweller_id, way.name):
+                    self._archive.index(
+                        dweller_id,
+                        record.id,
+                        way.name,
+                        way.to_remember(record.conversation.utterance),
+                    )
+                    rebuilt += 1
         return rebuilt
 
     # 思い出す
@@ -179,40 +198,6 @@ class Conversation:
         指す語だけの発話は意味で探しても何も出ないため、この道で渡す。
         """
         return self._memories.recent(dweller_id, self._how.recent_turns)
-
-    def _found_beyond(
-        self, dweller_id: str, utterance: str, recent: Collection[Episode]
-    ) -> tuple[Found, ...]:
-        """直近より前から、意味の近さで探す。
-
-        - 直近で渡すものを除く
-        - 近さと思い出した記録を別の値として持たせる
-
-        同じ記憶が二つの道で現れると、何が効いたのかを読めなくなる。
-        """
-        skip = [episode.id for episode in recent]
-        by_way = [self._by(way, dweller_id, utterance, skip) for way in self._ways]
-        return self._woven(by_way)
-
-    def _by(
-        self, way: Embeddings, dweller_id: str, utterance: str, skip: list[int]
-    ) -> tuple[Found, ...]:
-        return Finding(self._memories, self._how).by(way, dweller_id, utterance, skip)
-
-    def _woven(self, by_way: list[tuple[Found, ...]]) -> tuple[Found, ...]:
-        """道ごとの結果を、順位の高いものから交互に並べる。
-
-        点数を混ぜない。混ぜると、どの道が効いたかを読めなくなる。同じ記憶が
-        二つの道で出たら、先に出たほうだけを渡す。
-        """
-        woven: list[Found] = []
-        seen: set[int] = set()
-        for place in range(self._how.found_limit):
-            for found in by_way:
-                if place < len(found) and found[place].episode.id not in seen:
-                    seen.add(found[place].episode.id)
-                    woven.append(found[place])
-        return tuple(woven[: self._how.found_limit])
 
     def _record_retrieval(self, found: Collection[Found], at: datetime) -> None:
         """思い出したことを記録する。思い出しやすさはここから求める。"""

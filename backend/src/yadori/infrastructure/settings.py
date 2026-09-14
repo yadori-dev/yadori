@@ -82,13 +82,15 @@ class SettingsFile:
         """
         return self._home / "models"
 
-    def read(self) -> Settings:
+    def read(self, person: str | None = None) -> Settings:
         """設定を読む。
 
         - 誰であるかを読む
         - 名乗りを読む
         """
         configuration = Configuration(self._home).load()
+        if person is not None:
+            configuration.data["active"] = person
         written = configuration.require_person()
         declared = written.get("identity", "")
         if not isinstance(declared, str) or not declared.strip():

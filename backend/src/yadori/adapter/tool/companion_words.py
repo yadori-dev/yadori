@@ -41,6 +41,7 @@ class CompanionWords(ABC):
                 + "会話に出ていなくても、あなたは覚えています。"
             )
             lines.extend(self.found(one) for one in recollection.found)
+        lines.extend(one.record.conversation.describe() for one in recollection.external)
         return "\n".join(lines)
 
     def spoken(self, recollection: Recollection, utterance: str) -> str:
@@ -136,6 +137,9 @@ class CompanionWords(ABC):
         candidates.extend(
             ("関係する記憶:\n" + self.found(one), one.clarification is None)
             for one in recollection.found
+        )
+        candidates.extend(
+            (one.record.conversation.describe(), True) for one in recollection.external
         )
         candidates.extend(
             ("直近のやりとり:\n" + self.turn(episode), True)
