@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 from collections.abc import Callable
+from contextlib import redirect_stdout
 from typing import TextIO, final
 
 from yadori.adapter.tool.preparation_call import PreparationCall
@@ -26,7 +27,7 @@ class Preparing:
         runner: Callable[[str], int] | None = None,
     ) -> None:
         self._reading = reading or sys.stdin
-        self._writing = writing or sys.stdout
+        self._writing = writing or sys.stderr
         self._runner = runner or self._child
 
     def configure(self, configuration: Configuration, override: Mode | None) -> Configuration:
@@ -99,10 +100,11 @@ class Preparing:
         if options is None:
             return 0
         if step == "import":
-            return Importer(settings.home).run(
-                options.sources, settings.dweller.id, True, settings=settings
+            return Importer(settings.home, writing=sys.stderr).run(
+                options.sources, settings.dweller.id, True, settings=settings, concise=True
             )
-        return Dreamer(settings.home).run(settings)
+        with redirect_stdout(sys.stderr):
+            return Dreamer(settings.home).run(settings)
 
     def _child(self, step: str) -> int:
         return PreparationCall([sys.executable, "-I", "-m", "yadori", "_prepare-step", step]).run()

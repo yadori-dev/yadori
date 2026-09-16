@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -122,6 +122,8 @@ class ClaudeRecords:
             if identifier:
                 if identifier in known and known[identifier] != row:
                     raise ImportFailed("Claudeの同じ行識別子に異なる内容があります")
+                if identifier in known:
+                    continue
                 known[identifier] = row
             if self._user(row):
                 users[identifier] = row
@@ -154,12 +156,17 @@ class ClaudeRecords:
                 and RecordJson.text(previous, "sessionId") == session
                 and self._user(previous)
                 else None,
+                native_turn=RecordJson.text(parent, "promptId") or None,
             )
             if turn in held:
                 if result not in held[turn]:
                     held[turn].append(result)
                 continue
             if turn in complete and complete[turn] != result:
+                earlier = complete[turn]
+                if self._descends(row, earlier.answer, known):
+                    complete[turn] = replace(result, reply=earlier.reply + "\n\n" + result.reply)
+                    continue
                 held[turn] = [complete.pop(turn), result]
                 continue
             complete[turn] = result
@@ -176,6 +183,21 @@ class ClaudeRecords:
         return LogContents(
             originals, tuple(notices), tuple(one for group in held.values() for one in group)
         )
+
+    def _descends(
+        self, row: dict[str, object], ancestor: str, known: dict[str, dict[str, object]]
+    ) -> bool:
+        parent = RecordJson.text(row, "parentUuid")
+        seen: set[str] = set()
+        while parent and parent not in seen:
+            if parent == ancestor:
+                return True
+            seen.add(parent)
+            found = known.get(parent)
+            if found is None or found.get("sessionId") != row.get("sessionId"):
+                return False
+            parent = RecordJson.text(found, "parentUuid")
+        return False
 
     def _content(self, row: dict[str, object]) -> str:
         return RecordJson.parts(RecordJson.mapping(row.get("message")).get("content"))
@@ -319,9 +341,11 @@ class ClaudeRecords:
 @dataclass
 class CodexTurn:
     user: dict[str, object] | None = None
+    utterances: list[str] = field(default_factory=list)
     previous: str | None = None
     overlapping: bool = False
     ambiguous: bool = False
+    additional: bool = False
     context_after_ambiguity: bool = False
     finished: bool = False
 
@@ -375,7 +399,7 @@ class CodexRecords:
                 turn = incoming
             if row.get("type") == "turn_context":
                 incoming = RecordJson.text(payload, "turn_id")
-                if incoming == turn and turn in states and states[turn].ambiguous:
+                if incoming == turn and turn in states and states[turn].additional:
                     states[turn].context_after_ambiguity = True
                 if incoming and not turn:
                     states[incoming] = states.pop("", CodexTurn())
@@ -386,13 +410,12 @@ class CodexRecords:
                     if owner is None or owner == turn:
                         reply = ""
                     if state.user is not None:
-                        notices.append(
-                            "Codex: 同じ往復に複数の利用者発話があり対応を確定できません"
-                        )
-                        state.ambiguous = True
-                        prior = None
-                    state.user = row
-                    state.previous = prior
+                        state.utterances.append(RecordJson.parts(payload.get("content")))
+                        state.additional = True
+                    else:
+                        state.user = row
+                        state.utterances = [RecordJson.parts(payload.get("content"))]
+                        state.previous = prior
                 elif (
                     payload.get("role") == "user"
                     and not RecordJson.parts(payload.get("content")).strip()
@@ -417,9 +440,7 @@ class CodexRecords:
                         and owner in (None, identifier)
                         and (not target.overlapping or payload.get("last_agent_message") == reply)
                     ):
-                        text = RecordJson.parts(
-                            RecordJson.mapping(target.user.get("payload")).get("content")
-                        )
+                        text = "\n\n".join(target.utterances)
                         record = ExternalConversation(
                             "codex",
                             session,
@@ -438,7 +459,7 @@ class CodexRecords:
                         prior = (
                             identifier
                             if not target.overlapping
-                            and (not target.ambiguous or target.context_after_ambiguity)
+                            and (not target.additional or target.context_after_ambiguity)
                             else None
                         )
                     elif target.user is not None:

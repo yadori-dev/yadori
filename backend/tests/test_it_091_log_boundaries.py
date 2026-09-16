@@ -53,7 +53,7 @@ def log(path: Path, rows: list[dict[str, object]]) -> Path:
 
 
 def ambiguous() -> list[dict[str, object]]:
-    tool = user("tool-result", "a1", "")
+    tool = user("tool-result", "u1", "")
     tool["message"] = {
         "role": "user",
         "content": [{"type": "tool_result", "tool_use_id": "call", "content": "処理結果"}],
@@ -203,3 +203,55 @@ def test_ST_091_003_IT_091_002_既存の先行関係を変更せず保留を明�
     assert [archive.existing("person", one.source) for one in original.conversations] == before
     again = importing.preview_logs([changed])
     assert again.held == 3 and again.existing == 1 and not again.added
+
+
+def test_ST_102_003_IT_102_002_直列の完成応対は順序を保ち重複行は増やさない(
+    tmp_path: Path,
+) -> None:
+    rows = ambiguous()
+    rows[2]["parentUuid"] = "a1"
+    rows.insert(5, rows[4].copy())
+    result = SessionLogs().read("claude", log(tmp_path / "linear.jsonl", rows))
+    assert not result.held
+    assert result.conversations[0].reply == "応対X\n\n応対Y\n\n応対Z"
+    assert result.conversations[0].answer == "a3"
+    assert result.conversations[1].previous == "u1"
+    importing = Importing(SqliteArchive(tmp_path / "memory.sqlite"), "person")
+    pairs = CharacterPairs()
+    assert importing.apply(importing.preview_logs([result]), pairs) == 2
+    again = importing.preview_logs([result])
+    assert not again.added and again.existing == 2 and not again.held
+
+
+def test_ST_102_003_IT_102_002_ログ行とは別の発話識別子で宿り自身の記録を除く(
+    tmp_path: Path,
+) -> None:
+    from datetime import datetime
+
+    from yadori.adapter.store import SqliteMemories
+    from yadori.domain.memory import Dweller
+    from yadori.usecase.conversation import Conversation
+
+    row = user("log-row", None, "質問")
+    row["promptId"] = "native-prompt"
+    result = SessionLogs().read(
+        "claude",
+        log(
+            tmp_path / "own.jsonl",
+            [
+                row,
+                answer("reply", "log-row", "返事"),
+            ],
+        ),
+    )
+    database = tmp_path / "memory.sqlite"
+    memories = SqliteMemories(database)
+    try:
+        memories.settle(Dweller("person", "架空", "そら", "そら"))
+        _ = memories.write_identity("person", "そらです")
+        conversation = Conversation(memories, CharacterPairs(), lambda: datetime.fromisoformat(AT))
+        _ = conversation.remember("person", "質問", "返事", source="claude:native-prompt")
+    finally:
+        memories.close()
+    plan = Importing(SqliteArchive(database), "person").preview_logs([result])
+    assert plan.native == 1 and not plan.added

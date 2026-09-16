@@ -198,6 +198,6 @@ def test_ST_091_010_IT_091_004_起動時の実処理も二百件で打ち切ら�
 
     monkeypatch.setattr(DefaultEmbeddings, "__call__", embedding)
     assert Preparing.worker("import") == 0
-    assert "取り込み完了: 201 件 / 残り: 0 件" in capsys.readouterr().out
+    assert "取り込み完了: 201 件 / 残り: 0 件" in capsys.readouterr().err
     assert Preparing.worker("import") == 0
-    assert "追加予定: 0 件 / 既存: 201 件" in capsys.readouterr().out
+    assert capsys.readouterr().err == "取り込み: 新しい完成会話はありません\n"

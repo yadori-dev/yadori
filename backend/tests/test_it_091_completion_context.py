@@ -212,14 +212,14 @@ def test_ST_091_002_IT_091_001_Skill付加文は同じ親鎖の呼出しに限�
     assert len(result.conversations) == (1 if boundary == "valid" else 0)
 
 
-def test_ST_091_003_IT_091_002_複数発話は後のcontextでも保留し既存を変えない(
+def test_ST_102_003_IT_102_002_追加発話を順序どおり保存し既存の別原文は上書きしない(
     tmp_path: Path,
 ) -> None:
     from datetime import UTC, datetime
 
     from yadori.adapter.embedding import CharacterPairs
     from yadori.adapter.importing.archive import SqliteArchive
-    from yadori.domain.importing.model import ExternalConversation
+    from yadori.domain.importing.model import ExternalConversation, ImportFailed
     from yadori.usecase.importing.service import Importing
 
     rows: list[dict[str, object]] = [
@@ -236,24 +236,28 @@ def test_ST_091_003_IT_091_002_複数発話は後のcontextでも保留し既存
         event("task_complete", "t2", last_agent_message="返事2"),
     ]
     result = CodexRecords().read(rows)
-    assert len(result.held) == 1
-    assert result.conversations[0].previous == "t1"
+    assert not result.held
+    assert result.conversations[0].utterance == "質問t1\n\n質問correction"
+    assert result.conversations[1].previous == "t1"
+    fresh = Importing(SqliteArchive(tmp_path / "fresh.sqlite"), "person")
+    pairs = CharacterPairs()
+    assert fresh.apply(fresh.preview_logs([result]), pairs) == 2
+    assert not fresh.preview_logs([result]).added
     old = ExternalConversation(
         "codex", "fixture", "t1", "t1", datetime(2026, 9, 14, tzinfo=UTC), "質問correction", "返事1"
     )
     archive = SqliteArchive(tmp_path / "memory.sqlite")
     pairs = CharacterPairs()
-    for record in [old, result.conversations[0]]:
+    for record in [old, result.conversations[1]]:
         assert archive.keep("person", record, pairs.name, pairs.to_remember(record.utterance))
     before = [
-        archive.existing("person", record.source) for record in [old, result.conversations[0]]
+        archive.existing("person", record.source) for record in [old, result.conversations[1]]
     ]
     importing = Importing(archive, "person")
-    plan = importing.preview_logs([result])
-    assert plan.held == 2 and plan.dependent == 1 and not plan.added and plan.existing == 0
-    assert importing.apply(plan, pairs) == 0
+    with pytest.raises(ImportFailed, match="原文が変わっています"):
+        _ = importing.preview_logs([result])
     assert before == [
-        archive.existing("person", record.source) for record in [old, result.conversations[0]]
+        archive.existing("person", record.source) for record in [old, result.conversations[1]]
     ]
 
 
