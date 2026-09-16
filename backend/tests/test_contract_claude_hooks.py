@@ -146,6 +146,21 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
     usual.mkdir()
     (usual / ".credentials.json").symlink_to(credential)
     _write_json(usual / ".claude.json", {})
+    usual_hook = tmp_path / "usual-hook-ran"
+    _write_json(
+        usual / "settings.json",
+        {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": "touch " + shlex.quote(str(usual_hook))}
+                        ]
+                    }
+                ]
+            }
+        },
+    )
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -164,13 +179,21 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
             "HF_HUB_OFFLINE": "1",
         }
     )
+    from yadori.infrastructure.settings import SettingsFile
+    from yadori.infrastructure.start import Startup
+
+    initialized = SqliteMemories(home / "memories.sqlite")
+    try:
+        Startup(home).settle(initialized, SettingsFile(home).read())
+    finally:
+        initialized.close()
+
     session = ClaudeSession(home, tmp_path, environment, executable)
     prepared = session.prepare()
     try:
         done = subprocess.run(
             [
                 *prepared.argv,
-                "--no-session-persistence",
                 "--disable-slash-commands",
                 "--model",
                 "haiku",
@@ -200,3 +223,12 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
         session.finish(prepared)
 
     assert not prepared.run_dir.exists()
+    assert usual_hook.exists()
+    assert list((usual / "projects").rglob("*.jsonl"))
+    from yadori.adapter.importing.archive import SqliteArchive
+    from yadori.adapter.importing.records import SessionLogs
+    from yadori.usecase.importing.service import Importing
+
+    logs = [SessionLogs().read("claude", path) for path in (usual / "projects").rglob("*.jsonl")]
+    plan = Importing(SqliteArchive(home / "memories.sqlite"), "sora").preview_logs(logs)
+    assert plan.native == 1 and not plan.added

@@ -207,7 +207,7 @@ def test_IT_078_003_未確認の返事は異常終了後に捨てない(
     assert (probe.run / "turns/0.json").exists()
 
 
-def test_ST_078_004_IT_078_001_実際の起動で設定と履歴を普段の領域から分ける(
+def test_ST_102_001_ST_102_002_IT_078_001_実際の起動で普段の設定と履歴を保つ(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -267,11 +267,11 @@ def test_ST_078_004_IT_078_001_実際の起動で設定と履歴を普段の領�
     session = AgySession(tmp_path / "dweller", work, environment)
     assert session.launch() == 0
     observed = AgyJson.object((work / "observed.json").read_text())
-    assert observed["persona"] == "" and observed["foreign_hook"] is False
-    assert observed["usual_history"] is False
+    assert observed["persona"] == "foreign-persona" and observed["foreign_hook"] is True
+    assert observed["usual_history"] is True
     assert observed["toolPermission"] == "strict" and observed["enableTerminalSandbox"] is True
     assert (data / "usual-history").read_text() == "usual"
-    assert not (data / "session-history").exists()
+    assert (data / "session-history").read_text() == "synthetic"
     assert not list((tmp_path / "dweller/agy/sessions").iterdir())
     for key in (
         "GEMINI_API_KEY",
@@ -279,8 +279,12 @@ def test_ST_078_004_IT_078_001_実際の起動で設定と履歴を普段の領�
         "CASCADE_GLOBAL_CONFIG_OVERRIDE",
     ):
         changed = dict(environment, **{key: "synthetic"})
-        with pytest.raises(ValueError, match="認証"):
-            _ = AgySession(tmp_path / "dweller", work, changed).prepare()
+        regular = AgySession(tmp_path / "dweller", work, changed)
+        prepared = regular.prepare()
+        try:
+            assert prepared.environment[key] == "synthetic"
+        finally:
+            regular.finish(prepared, 0)
 
 
 @pytest.mark.parametrize(

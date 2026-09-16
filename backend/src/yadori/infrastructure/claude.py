@@ -48,12 +48,14 @@ class ClaudeCompanion:
         self._cwd = cwd
         self._startup = startup or Startup(home)
 
-    def run(self) -> int:
+    def run(self, arguments: tuple[str, ...] = ()) -> int:
         try:
             settings = self._settings_file.read()
             self._prepare_memory(settings)
-            print(f"（{settings.dweller.nickname} として Claude Code を起こします）")
-            return ClaudeSession(settings.home, self._cwd).launch()
+            print(
+                f"（{settings.dweller.nickname} として Claude Code を起こします）", file=sys.stderr
+            )
+            return ClaudeSession(settings.home, self._cwd).launch(arguments)
         except (NotSettled, EmbeddingsUnavailable, ClaudeSessionError, sqlite3.Error) as trouble:
             print(trouble, file=sys.stderr)
             return 1

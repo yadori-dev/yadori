@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import sys
+import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -16,6 +18,49 @@ class MemoryConnectionError(Exception):
 
 
 class MemoryConnection:
+    @classmethod
+    def check_regular(cls, provider: str, cwd: Path, environment: Mapping[str, str]) -> None:
+        """通常設定を合成せず、宿りの予約名との衝突だけを確認する。"""
+        home = Path(environment.get("HOME", str(Path.home())))
+        workspace = next((root for root in (cwd, *cwd.parents) if (root / ".git").exists()), cwd)
+        roots = tuple(root for root in (cwd, *cwd.parents) if root.is_relative_to(workspace))
+        if provider == "claude":
+            configured = environment.get("CLAUDE_CONFIG_DIR")
+            usual = Path(configured).expanduser() if configured else home / ".claude"
+            if not usual.is_absolute():
+                usual = cwd / usual
+            state_path = usual / ".claude.json" if configured else home / ".claude.json"
+            state = cls._configuration(state_path)
+            cls.check_name(state.get("mcpServers"))
+            projects = state.get("projects")
+            if isinstance(projects, dict):
+                for root in roots:
+                    project: object = projects.get(str(root))  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+                    if isinstance(project, dict):
+                        cls.check_name(project.get("mcpServers"))  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+            for root in roots:
+                cls.check_name(cls._configuration(root / ".mcp.json").get("mcpServers"))
+        elif provider == "codex":
+            usual = Path(environment.get("CODEX_HOME", str(home / ".codex"))).expanduser()
+            if not usual.is_absolute():
+                usual = cwd / usual
+            for path in (usual / "config.toml", *(root / ".codex/config.toml" for root in roots)):
+                cls.check_name(cls._configuration(path).get("mcp_servers"))
+
+    @staticmethod
+    def _configuration(path: Path) -> dict[str, object]:
+        if not path.is_file():
+            return {}
+        try:
+            text = path.read_text(encoding="utf-8")
+            value: object = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
+        except (ValueError, UnicodeError):
+            # 設定自体のエラー表示は普段と同じ道具が受け持つ。
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        return {str(key): item for key, item in value.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+
     @staticmethod
     def check_name(servers: object) -> None:
         if isinstance(servers, dict) and NAME in servers:

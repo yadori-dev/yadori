@@ -38,12 +38,12 @@ class CodexCompanion:
         self._cwd = cwd
         self._startup = startup or Startup(home)
 
-    def run(self) -> int:
+    def run(self, arguments: tuple[str, ...] = ()) -> int:
         try:
             settings = self._settings_file.read()
             self._prepare_memory(settings)
-            print(f"（{settings.dweller.nickname} として Codex を起こします）")
-            return CodexSession(settings.home, self._cwd).launch()
+            print(f"（{settings.dweller.nickname} として Codex を起こします）", file=sys.stderr)
+            return CodexSession(settings.home, self._cwd).launch(arguments)
         except (NotSettled, EmbeddingsUnavailable, CodexSessionError, sqlite3.Error) as trouble:
             print(trouble, file=sys.stderr)
             return 1
