@@ -40,6 +40,8 @@ USAGE = """使い方:
   yadori claude                    宿りとして Claude Code を起こす
   yadori agy                       宿りとして agy を起こす
   yadori codex                     宿りとして Codex を起こす
+      道具名の後ろの引数は、その道具へ渡す。再開も普段の履歴を使う。
+      例: yadori claude --resume / yadori codex resume --last / yadori agy --continue
   yadori discord                   Discord で話しかけられるのを待つ
       トークンは YADORI_HOME の discord.toml に置く
   yadori [claude/codex/agy/chat] [--prepare auto/ask/skip]
@@ -136,7 +138,7 @@ class Entry:
                 return 1
         if self._argv == ["setting"]:
             return Setting().run()
-        if not self._argv or self._argv in (["claude"], ["codex"], ["agy"], ["chat"]):
+        if not self._argv or self._argv[0] in {"claude", "codex", "agy"} or self._argv == ["chat"]:
             return self._launch()
         if len(self._argv) == 3 and self._argv[0] == "_claude-hook":
             return ClaudeHook(self._argv[1], Path(self._argv[2])).run()
@@ -181,10 +183,10 @@ class Entry:
                     if name == "chat":
                         return Startup().run()
                     if name == "claude":
-                        return ClaudeCompanion().run()
+                        return ClaudeCompanion().run(tuple(self._argv[1:]))
                     if name == "codex":
-                        return CodexCompanion().run()
-                    return AgyCompanion().run()
+                        return CodexCompanion().run(tuple(self._argv[1:]))
+                    return AgyCompanion().run(tuple(self._argv[1:]))
                 finally:
                     if before is None:
                         _ = os.environ.pop("YADORI_SETTINGS_SNAPSHOT", None)

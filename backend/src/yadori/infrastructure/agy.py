@@ -150,10 +150,10 @@ class AgyMemory:
                     fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError:
                     continue
-                for record in sorted((run_dir / "turns").glob("*.json")):
+                for record in sorted((run_dir / "turns").rglob("*.json")):
                     self.replay(record)
                 # 施錠されず残った記録は異常終了。完成状態を推定して捨てない。
-                files = list((run_dir / "turns").glob("*.json"))
+                files = list((run_dir / "turns").rglob("*.json"))
                 unfinished = any(
                     AgyJson.object(path.read_text()).get("reply") is None for path in files
                 )
@@ -193,8 +193,13 @@ class AgyHook:
             _ = (self._run_dir / "stage").write_text(self._event)
             text = sys.stdin.read()
             notice = AgyNotice.read(self._event, text, self._run_dir)
-            self._check_primary(notice)
-            path = self._run_dir / "turns" / f"{notice.step}.json"
+            if (self._run_dir / "transcript-root").is_file():
+                directory = self._run_dir / "turns" / notice.conversation_id
+                directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            else:
+                self._check_primary(notice)
+                directory = self._run_dir / "turns"
+            path = directory / f"{notice.step}.json"
             ledger = RecallLedger(self._run_dir, self._files.read().dweller.id)
             if self._event == "tool":
                 print(self._tool(text))
@@ -279,14 +284,14 @@ class AgyHook:
 
 @final
 class AgyCompanion:
-    def run(self) -> int:
+    def run(self, arguments: tuple[str, ...] = ()) -> int:
         try:
             memory = AgyMemory()
             home = memory.prepare()
             memory.recover(home / "agy/sessions")
             nickname = SettingsFile(home).read().dweller.nickname
-            print(f"（{nickname} として agy を起こします）", flush=True)
-            return AgySession(home).launch()
+            print(f"（{nickname} として agy を起こします）", file=sys.stderr)
+            return AgySession(home).launch(arguments)
         except (
             subprocess.SubprocessError,
             OSError,

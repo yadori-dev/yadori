@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import subprocess
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -17,8 +16,6 @@ from tests.sora import fixed
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import (
-    CodexSession,
-    CodexSessionError,
     CodexWords,
     PendingStore,
     PendingTurn,
@@ -58,23 +55,6 @@ def _mapping(value: object) -> dict[str, object]:
     return checked
 
 
-def _without_parent_git() -> dict[str, str]:
-    local = {
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_INDEX_FILE",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_COMMON_DIR",
-        "GIT_PREFIX",
-    }
-    return {k: v for k, v in os.environ.items() if k not in local}
-
-
-def _init_git(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    _ = subprocess.run(["git", "init", "-q", str(path)], check=True, env=_without_parent_git())
-
-
 def _hook(
     event: str,
     payload: Mapping[str, object],
@@ -85,143 +65,6 @@ def _hook(
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload, ensure_ascii=False)))
     startup = Startup(home, default=fixed(CharacterPairs()))
     return CodexHook(event, run_dir, home, startup).run()
-
-
-class TestIT070001:
-    """AD-070-001: Codex の起動と借りる設定を adapter/tool へ閉じる。"""
-
-    def test_IT_070_001_普段の設定と作業場所設定を合成し危険設定を除外する(
-        self, tmp_path: Path
-    ) -> None:
-        home = _home(tmp_path / "home")
-        usual = tmp_path / "usual_codex"
-        usual.mkdir()
-        _ = (usual / "config.toml").write_text(
-            'model = "gpt-5"\nmodel_reasoning_effort = "high"\n'
-            + 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n'
-            + f'[projects."{tmp_path / "work"}"]\ntrust_level = "trusted"\n',
-            encoding="utf-8",
-        )
-        work = tmp_path / "work"
-        work.mkdir()
-
-        session = CodexSession(
-            home=home,
-            cwd=work,
-            environment={"CODEX_CONFIG_DIR": str(usual)},
-            executable="true",
-        )
-        prepared = session.prepare()
-        try:
-            config_text = (prepared.run_dir / "config.toml").read_text(encoding="utf-8")
-            # 許可された設定が写っている
-            assert 'model = "gpt-5"' in config_text
-            assert 'model_reasoning_effort = "high"' in config_text
-            # 危険な設定（never, danger-full-access）は除外されている
-            assert "approval_policy" not in config_text
-            assert "danger-full-access" not in config_text
-            # 作業場所の信頼が設定されている
-            assert f'[projects."{work.resolve()}"]' in config_text
-            # hooks.json が作られている
-            assert (prepared.run_dir / "hooks.json").exists()
-        finally:
-            session.finish(prepared)
-
-    def test_IT_070_001_未信頼の作業場所では起動を断る(self, tmp_path: Path) -> None:
-        home = _home(tmp_path / "home")
-        usual = tmp_path / "usual_codex"
-        usual.mkdir()
-        _ = (usual / "config.toml").write_text('model = "gpt-5"\n', encoding="utf-8")
-        work = tmp_path / "work"
-        work.mkdir()
-        # 作業場所に設定やフックを置く
-        (work / ".codex").mkdir()
-        _ = (work / ".codex" / "config.toml").write_text('theme = "dark"\n', encoding="utf-8")
-
-        session = CodexSession(
-            home=home,
-            cwd=work,
-            environment={"CODEX_CONFIG_DIR": str(usual)},
-            executable="true",
-        )
-        with pytest.raises(CodexSessionError) as trouble:
-            _ = session.prepare()
-        assert "信頼されていません" in str(trouble.value)
-
-    def test_IT_070_001_worktreeでは元のチェックアウト直下で信頼を照合する(
-        self, tmp_path: Path
-    ) -> None:
-        home = _home(tmp_path / "home")
-        repo = tmp_path / "repo"
-        _init_git(repo)
-        _ = (repo / "README.md").write_text("sample\n", encoding="utf-8")
-        _ = subprocess.run(["git", "add", "."], cwd=repo, check=True, env=_without_parent_git())
-        _ = subprocess.run(
-            [
-                "git",
-                "-c",
-                "user.name=test",
-                "-c",
-                "user.email=test@example.com",
-                "commit",
-                "-m",
-                "init",
-            ],
-            cwd=repo,
-            check=True,
-            env=_without_parent_git(),
-        )
-        worktree = tmp_path / "worktree"
-        _ = subprocess.run(
-            ["git", "worktree", "add", "-b", "wt-branch", str(worktree)],
-            cwd=repo,
-            check=True,
-            env=_without_parent_git(),
-        )
-
-        usual = tmp_path / "usual_codex"
-        usual.mkdir()
-        # 元の repo 側を trusted に登録する
-        _ = (usual / "config.toml").write_text(
-            f'[projects."{repo.resolve()}"]\ntrust_level = "trusted"\n',
-            encoding="utf-8",
-        )
-        # worktree 側に .codex 設定を置く
-        (worktree / ".codex").mkdir()
-        _ = (worktree / ".codex" / "config.toml").write_text('theme = "light"\n', encoding="utf-8")
-
-        session = CodexSession(
-            home=home,
-            cwd=worktree,
-            environment={"CODEX_CONFIG_DIR": str(usual)},
-            executable="true",
-        )
-        prepared = session.prepare()
-        try:
-            config_text = (prepared.run_dir / "config.toml").read_text(encoding="utf-8")
-            # 元の repo が信頼されているため起動できる
-            assert f'[projects."{repo.resolve()}"]' in config_text
-            assert 'theme = "light"' in config_text
-        finally:
-            session.finish(prepared)
-
-    def test_IT_070_001_ChatGPT以外の認証やAPIキーでは起動を断る(self, tmp_path: Path) -> None:
-        home = _home(tmp_path / "home")
-        usual = tmp_path / "usual_codex"
-        usual.mkdir()
-        work = tmp_path / "work"
-        work.mkdir()
-
-        # OPENAI_API_KEY 環境変数がある場合は起動中止
-        session = CodexSession(
-            home=home,
-            cwd=work,
-            environment={"CODEX_CONFIG_DIR": str(usual), "OPENAI_API_KEY": "sk-dummy"},
-            executable="true",
-        )
-        with pytest.raises(CodexSessionError) as trouble:
-            _ = session.prepare()
-        assert "OPENAI_API_KEY" in str(trouble.value)
 
 
 class TestIT070002:

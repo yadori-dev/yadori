@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -23,6 +23,7 @@ class ExternalConversation:
     utterance: str
     reply: str
     previous: str | None = None
+    native_turn: str | None = field(default=None, compare=False)
 
     def __post_init__(self) -> None:
         if not all(
@@ -39,7 +40,9 @@ class ExternalConversation:
     @property
     def native_source(self) -> str:
         return (
-            f"{self.provider}:{self.turn}" if self.provider in {"claude", "codex"} else self.source
+            f"{self.provider}:{self.native_turn or self.turn}"
+            if self.provider in {"claude", "codex"}
+            else self.source
         )
 
     def describe(self) -> str:

@@ -123,8 +123,10 @@ if event == 'UserPromptSubmit':
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize("continue_after_stop", [False, True])
 def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一往復を確定する(
     tmp_path: Path,
+    continue_after_stop: bool,
 ) -> None:
     executable = shutil.which("claude")
     credential = Path.home() / ".claude" / ".credentials.json"
@@ -146,6 +148,62 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
     usual.mkdir()
     (usual / ".credentials.json").symlink_to(credential)
     _write_json(usual / ".claude.json", {})
+    usual_hook = tmp_path / "usual-hook-ran"
+    _write_json(
+        usual / "settings.json",
+        {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": "touch " + shlex.quote(str(usual_hook))}
+                        ]
+                    }
+                ]
+            }
+        },
+    )
+    if continue_after_stop:
+        script = tmp_path / "continue_once.py"
+        _ = script.write_text(
+            "import json, pathlib, sys\n"
+            + "event = json.load(sys.stdin)\n"
+            + "marker = pathlib.Path(__file__).with_suffix('.seen')\n"
+            + "if not marker.exists():\n"
+            + "    marker.touch()\n"
+            + "    reason = '追加の確認を完了して CONTINUED_E2E を含む短い返事をしてください。'\n"
+            + "    print(json.dumps({'decision':'block','reason':reason}))\n"
+            + "else:\n"
+            + "    marker.write_text(json.dumps(event.get('stop_hook_active')))\n"
+        )
+        _write_json(
+            usual / "settings.json",
+            {
+                "hooks": {
+                    "UserPromptSubmit": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "touch " + shlex.quote(str(usual_hook)),
+                                }
+                            ]
+                        }
+                    ],
+                    "Stop": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": shlex.join([sys.executable, str(script)]),
+                                }
+                            ]
+                        }
+                    ],
+                }
+            },
+        )
+    expected = 2 if continue_after_stop else 1
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -164,13 +222,21 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
             "HF_HUB_OFFLINE": "1",
         }
     )
+    from yadori.infrastructure.settings import SettingsFile
+    from yadori.infrastructure.start import Startup
+
+    initialized = SqliteMemories(home / "memories.sqlite")
+    try:
+        Startup(home).settle(initialized, SettingsFile(home).read())
+    finally:
+        initialized.close()
+
     session = ClaudeSession(home, tmp_path, environment, executable)
     prepared = session.prepare()
     try:
         done = subprocess.run(
             [
                 *prepared.argv,
-                "--no-session-persistence",
                 "--disable-slash-commands",
                 "--model",
                 "haiku",
@@ -187,16 +253,32 @@ def test_IT_068_005_実際のClaudeへ宿りの文脈を渡して停止時に一
         assert done.returncode == 0, done.stderr
         memories = SqliteMemories(home / "memories.sqlite")
         try:
-            assert memories.count_episodes("sora") == 1
+            assert memories.count_episodes("sora") == expected
             episode = memories.recent("sora", 1)[0]
             assert episode.utterance == "短く返事をしてください。"
-            assert "YADORI_E2E" in episode.reply
+            if continue_after_stop:
+                assert "CONTINUED_E2E" in episode.reply
+                assert any("YADORI_E2E" in one.reply for one in memories.recent("sora", expected))
+            else:
+                assert "YADORI_E2E" in episode.reply
             assert episode.recalled_at is not None
             assert episode.source is not None and episode.source.startswith("claude:")
-            assert len(memories.shifts("sora")) == 1
+            assert len(memories.shifts("sora")) == expected
         finally:
             memories.close()
     finally:
         session.finish(prepared)
 
     assert not prepared.run_dir.exists()
+    assert usual_hook.exists()
+    assert list((usual / "projects").rglob("*.jsonl"))
+    from yadori.adapter.importing.archive import SqliteArchive
+    from yadori.adapter.importing.records import SessionLogs
+    from yadori.usecase.importing.service import Importing
+
+    logs = [SessionLogs().read("claude", path) for path in (usual / "projects").rglob("*.jsonl")]
+    plan = Importing(SqliteArchive(home / "memories.sqlite"), "sora").preview_logs(logs)
+    assert plan.native == expected and not plan.added
+
+    if continue_after_stop:
+        assert (tmp_path / "continue_once.seen").read_text() == "true"
