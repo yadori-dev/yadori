@@ -51,7 +51,7 @@ class ToolChoice:
     def _unavailable(self, name: str, internal: bool) -> str | None:
         if shutil.which(name) is None:
             return "未導入"
-        if name == "agy":
+        if name == "agy" and internal:
             if sys.platform != "linux" or not shutil.which("bwrap") or not shutil.which("timeout"):
                 return "この環境では設定・履歴の分離に未対応（Linux、bubblewrap、coreutils が必要）"
             try:

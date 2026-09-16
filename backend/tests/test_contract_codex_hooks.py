@@ -182,18 +182,28 @@ def test_IT_070_005_実際のCodexへ宿りの文脈を渡して停止時に一�
     }
     environment.update(
         {
-            "CODEX_CONFIG_DIR": str(usual),
+            "CODEX_HOME": str(usual),
+            "CODEX_SQLITE_HOME": str(usual),
             "YADORI_HOME": str(home),
             "HF_HUB_OFFLINE": "1",
         }
     )
+
+    from yadori.infrastructure.settings import SettingsFile
+    from yadori.infrastructure.start import Startup
+
+    initialized = SqliteMemories(home / "memories.sqlite")
+    try:
+        Startup(home).settle(initialized, SettingsFile(home).read())
+    finally:
+        initialized.close()
 
     session = CodexSession(home, work, environment, executable)
     prepared = session.prepare()
     try:
         done = subprocess.run(
             [
-                executable,
+                *prepared.argv,
                 "exec",
                 "--dangerously-bypass-hook-trust",
                 "--cd",
@@ -223,3 +233,30 @@ def test_IT_070_005_実際のCodexへ宿りの文脈を渡して停止時に一�
         session.finish(prepared)
 
     assert not prepared.run_dir.exists()
+    assert list((usual / "sessions").rglob("*.jsonl"))
+    resumed = session.prepare()
+    try:
+        done = subprocess.run(
+            [
+                *resumed.argv,
+                "--dangerously-bypass-hook-trust",
+                "exec",
+                "resume",
+                "--last",
+                "再開の確認です。もう一度短く返事をしてください。",
+            ],
+            cwd=work,
+            env=resumed.environment,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        memories = SqliteMemories(home / "memories.sqlite")
+        try:
+            assert memories.count_episodes("sora") == 2
+        finally:
+            memories.close()
+    finally:
+        session.finish(resumed)

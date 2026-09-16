@@ -72,9 +72,15 @@ class AgyNotice:
         conversation_id = AgyJson.text(payload, "conversationId")
         if re.fullmatch(r"[0-9a-f-]{36}", conversation_id) is None:
             raise ValueError("agy の会話の識別子を読めません")
-        path = run_dir / "gemini/antigravity-cli/brain" / conversation_id
+        configured = run_dir / "transcript-root"
+        root = (
+            Path(configured.read_text(encoding="utf-8"))
+            if configured.is_file()
+            else run_dir / "gemini/antigravity-cli/brain"
+        ).resolve()
+        path = root / conversation_id
         path = path / ".system_generated/logs/transcript_full.jsonl"
-        if not path.resolve().is_relative_to(run_dir.resolve()):
+        if not path.resolve().is_relative_to(root):
             raise ValueError("agy の記録が専用領域の外を指しています")
         lines = [AgyJson.object(line) for line in path.read_text(encoding="utf-8").splitlines()]
         users = [

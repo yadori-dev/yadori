@@ -19,9 +19,7 @@ from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.store import SqliteMemories
 from yadori.adapter.tool import (
     CodexSession,
-    CodexSessionError,
     CodexWords,
-    PendingStore,
 )
 from yadori.domain.memory import (
     Character,
@@ -79,68 +77,6 @@ def _call_hook(
     startup = Startup(home, default=fixed(CharacterPairs()))
     code = CodexHook(event, run_dir, home, startup).run()
     return code, out.getvalue(), err.getvalue()
-
-
-class TestST070001:
-    """ST-070-001: 設定ファイルだけがある新しい場所から宿りのCodexを起こす。"""
-
-    def test_ST_070_001_新しい場所から安全な設定で起動準備でき終了後に履歴が消える(
-        self, tmp_path: Path
-    ) -> None:
-        home = _home(tmp_path / "home")
-        codex_home = tmp_path / "codex_home"
-        work_dir = tmp_path / "work"
-        work_dir.mkdir(parents=True, exist_ok=True)
-
-        # 普段の設定
-        default_config = (
-            'model = "gpt-4o"\n'
-            + 'model_reasoning_effort = "high"\n'
-            + 'approval_policy = "never"\n'
-            + 'sandbox_mode = "danger-full-access"\n'
-            + '[hooks]\npre_tool = "rm -rf /"\n'
-            + 'OPENAI_API_KEY = "sk-dangerous"\n'
-            + f'[projects."{work_dir.resolve()}"]\ntrust_level = "trusted"\n'
-        )
-        codex_home.mkdir(parents=True, exist_ok=True)
-        _ = (codex_home / "config.toml").write_text(default_config, encoding="utf-8")
-        _write_json(codex_home / "auth.json", {"tokens": {"access_token": "valid"}})
-
-        session = CodexSession(
-            home=home,
-            cwd=work_dir,
-            environment={"CODEX_CONFIG_DIR": str(codex_home)},
-            executable="true",
-        )
-
-        prepared = session.prepare()
-        try:
-            assert prepared.run_dir.exists()
-            assert (prepared.run_dir / "config.toml").exists()
-
-            # 設定の検証
-            config_text = (prepared.run_dir / "config.toml").read_text(encoding="utf-8")
-            assert 'model = "gpt-4o"' in config_text
-            assert 'model_reasoning_effort = "high"' in config_text
-            assert "approval_policy" not in config_text
-            assert "sandbox_mode" not in config_text
-            assert "pre_tool" not in config_text
-            assert "sk-dangerous" not in config_text
-
-            # フック設定の検証
-            assert (prepared.run_dir / "hooks.json").exists()
-            hooks_text = (prepared.run_dir / "hooks.json").read_text(encoding="utf-8")
-            assert "additionalContextLimit" in hooks_text
-            hooks_data = _mapping(json.loads(hooks_text))  # pyright: ignore[reportAny]
-            assert "hooks" in hooks_data
-
-            # 認証 symlink の検証
-            assert (prepared.run_dir / "auth.json").is_symlink()
-        finally:
-            session.finish(prepared)
-
-        # 終了後に一時設定ディレクトリが消えていること
-        assert not prepared.run_dir.exists()
 
 
 class TestST070002:
@@ -306,39 +242,6 @@ class TestST070004:
             assert not (codex_home / "hooks.json").exists()
         finally:
             session.finish(prepared)
-
-
-class TestST070005:
-    """ST-070-005: 未信頼や認証なしのときは起動せず未完を残さない。"""
-
-    def test_ST_070_005_未信頼の作業場所では起動を拒絶する(self, tmp_path: Path) -> None:
-        home = _home(tmp_path / "home")
-        codex_home = tmp_path / "codex_home"
-        untrusted_work = tmp_path / "untrusted"
-        untrusted_work.mkdir(parents=True, exist_ok=True)
-        # 作業場所に .codex/config.toml があることで信頼チェック対象にする
-        (untrusted_work / ".codex").mkdir(parents=True, exist_ok=True)
-        _ = (untrusted_work / ".codex" / "config.toml").write_text(
-            'model = "gpt-4o"\n', encoding="utf-8"
-        )
-
-        codex_home.mkdir(parents=True, exist_ok=True)
-        _ = (codex_home / "config.toml").write_text('model = "gpt-4o"\n', encoding="utf-8")
-        _write_json(codex_home / "auth.json", {"tokens": {"access_token": "test"}})
-
-        session = CodexSession(
-            home=home,
-            cwd=untrusted_work,
-            environment={"CODEX_CONFIG_DIR": str(codex_home)},
-            executable="true",
-        )
-        with pytest.raises(CodexSessionError) as excinfo:
-            _ = session.prepare()
-        assert "信頼されていません" in str(excinfo.value)
-
-        # 未完ファイルが残らないこと
-        store = PendingStore(home / "codex" / "pending")
-        assert store.read("any") is None
 
 
 class TestST070006:

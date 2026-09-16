@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import sqlite3
 import subprocess
 import sys
@@ -18,7 +17,7 @@ import pytest
 from tests.sora import fixed
 from yadori.adapter.embedding import CharacterPairs
 from yadori.adapter.store import SqliteMemories
-from yadori.adapter.tool import ClaudeSession, ClaudeSessionError, ClaudeWords
+from yadori.adapter.tool import ClaudeWords
 from yadori.domain.conversation import CannotSpeak
 from yadori.domain.memory import (
     Character,
@@ -37,11 +36,6 @@ from yadori.infrastructure.claude import ClaudeCompanion, ClaudeHook
 from yadori.infrastructure.start import Startup
 
 
-def _write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
-
-
 def _object(path: Path) -> dict[str, object]:
     parsed: object = json.loads(path.read_text(encoding="utf-8"))  # pyright: ignore[reportAny]
     assert isinstance(parsed, dict)
@@ -49,15 +43,6 @@ def _object(path: Path) -> dict[str, object]:
     for key, value in parsed.items():  # pyright: ignore[reportUnknownVariableType]
         assert isinstance(key, str)
         checked[key] = value
-    return checked
-
-
-def _mapping(value: object) -> dict[str, object]:
-    assert isinstance(value, dict)
-    checked: dict[str, object] = {}
-    for key, item in value.items():  # pyright: ignore[reportUnknownVariableType]
-        assert isinstance(key, str)
-        checked[key] = item
     return checked
 
 
@@ -71,32 +56,6 @@ def _home(path: Path) -> Path:
     return path
 
 
-def _init_git(path: Path) -> None:
-    path.mkdir(parents=True)
-    _ = subprocess.run(["git", "init", "-q", str(path)], check=True, env=_without_parent_git())
-
-
-def _without_parent_git() -> dict[str, str]:
-    local = {
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_COMMON_DIR",
-        "GIT_CONFIG",
-        "GIT_CONFIG_COUNT",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_DIR",
-        "GIT_GRAFT_FILE",
-        "GIT_IMPLICIT_WORK_TREE",
-        "GIT_INDEX_FILE",
-        "GIT_NO_REPLACE_OBJECTS",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_PREFIX",
-        "GIT_REPLACE_REF_BASE",
-        "GIT_SHALLOW_FILE",
-        "GIT_WORK_TREE",
-    }
-    return {key: value for key, value in os.environ.items() if key not in local}
-
-
 def _hook(
     event: str,
     payload: Mapping[str, object],
@@ -107,326 +66,6 @@ def _hook(
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload, ensure_ascii=False)))
     startup = Startup(home, default=fixed(CharacterPairs()))
     return ClaudeHook(event, run_dir, home, startup).run()
-
-
-def test_IT_068_001_普段の設定から安全な範囲だけを一回の起動へ借りる(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "yadori"
-    usual = tmp_path / "usual"
-    workspace = tmp_path / "workspace"
-    nested = workspace / "nested"
-    safe_plugin = tmp_path / "safe-plugin"
-    safe_plugin.mkdir()
-    _ = (safe_plugin / "SKILL.md").write_text("静的な指示", encoding="utf-8")
-    _write_json(safe_plugin / ".claude-plugin" / "plugin.json", {"name": "safe"})
-    unsafe_plugins = {
-        "hooks@market": {"hooks": "./custom-hooks.json"},
-        "mcp@market": {"mcpServers": {"server": {"command": "server"}}},
-        "style@market": {"outputStyles": "./styles"},
-        "monitor@market": {"experimental": {"monitors": "./monitors.json"}},
-    }
-    installed_plugins: dict[str, object] = {"safe@market": [{"installPath": str(safe_plugin)}]}
-    for name, manifest in unsafe_plugins.items():
-        plugin = tmp_path / name.replace("@", "-")
-        _write_json(plugin / ".claude-plugin" / "plugin.json", {"name": name, **manifest})
-        installed_plugins[name] = [{"installPath": str(plugin)}]
-    _write_json(
-        usual / "plugins" / "installed_plugins.json",
-        {"plugins": installed_plugins},
-    )
-    _init_git(workspace)
-    nested.mkdir()
-    _write_json(
-        usual / "settings.json",
-        {
-            "model": "opus",
-            "hooks": {"Stop": ["普段の処理"]},
-            "env": {"SAFE": "kept"},
-            "enabledPlugins": {
-                "safe@market": True,
-                **dict.fromkeys(unsafe_plugins, True),
-            },
-            "permissions": {"allow": ["Read(/notes/**)"]},
-        },
-    )
-    _write_json(
-        nested / ".claude" / "settings.json",
-        {
-            "permissions": {"deny": ["Write(/secrets/**)"]},
-            "statusLine": {"type": "command", "command": "status"},
-        },
-    )
-    _write_json(
-        nested / ".claude" / "settings.local.json",
-        {"permissions": {"deny": ["Read(/legacy/**)"]}},
-    )
-    _write_json(
-        workspace / ".claude" / "settings.local.json",
-        {"permissions": {"deny": ["Read(/main/**)"]}},
-    )
-    root_skill = workspace / ".claude" / "skills" / "root-skill" / "SKILL.md"
-    root_skill.parent.mkdir(parents=True)
-    _ = root_skill.write_text("リポジトリ直下から借りる指示", encoding="utf-8")
-    _write_json(
-        workspace / ".mcp.json",
-        {
-            "mcpServers": {
-                "approved": {"command": "server", "args": ["relative.toml"]},
-                "disabled": {"command": "unused"},
-            }
-        },
-    )
-    _write_json(
-        usual / ".claude.json",
-        {
-            "mcpServers": {
-                "user": {"command": "user-server"},
-                "disabled-user": {"command": "must-not-run"},
-            },
-            "projects": {
-                str(workspace): {
-                    "hasTrustDialogAccepted": True,
-                    "enabledMcpjsonServers": ["approved"],
-                    "disabledMcpjsonServers": ["disabled"],
-                    "disabledMcpServers": ["disabled-user", "disabled-local"],
-                    "mcpServers": {
-                        "local": {"command": "local-server"},
-                        "disabled-local": {"command": "must-not-run"},
-                        "dynamic": {"command": "skip", "headersHelper": "headers"},
-                    },
-                }
-            },
-        },
-    )
-    credential = usual / ".credentials.json"
-    _ = credential.write_text("{}", encoding="utf-8")
-
-    session = ClaudeSession(
-        home,
-        nested,
-        {
-            "CLAUDE_CONFIG_DIR": str(usual),
-            "ANTHROPIC_API_KEY": "従量課金へ繋がる値",
-            "SAFE": "kept",
-        },
-        executable="/bin/true",
-    )
-    prepared = session.prepare()
-    try:
-        borrowed = _object(prepared.run_dir / "settings.json")
-        required = _object(prepared.run_dir / "yadori-settings.json")
-        mcp = _object(prepared.run_dir / "mcp.json")
-
-        assert borrowed["model"] == "opus" and "hooks" not in borrowed and "env" not in borrowed
-        assert borrowed["enabledPlugins"] == {"safe@market": True, "mcp@market": True}
-        permissions = borrowed["permissions"]
-        assert isinstance(permissions, dict)
-        assert permissions["allow"] == [
-            f"Read(//{usual.as_posix().lstrip('/')}/notes/**)",
-            "mcp__yadori_memory__recall_search",
-            "mcp__yadori_memory__recall_get",
-        ]
-        base = nested.as_posix().lstrip("/")
-        assert permissions["deny"] == [
-            f"Write(//{base}/secrets/**)",
-            f"Read(//{base}/legacy/**)",
-            f"Read(//{base}/main/**)",
-        ]
-        hooks = _mapping(required["hooks"])
-        assert set(hooks) == {
-            "UserPromptSubmit",
-            "Stop",
-            "StopFailure",
-            "SessionEnd",
-        }
-        assert str(Path(sys.executable).with_name("yadori").resolve()) in json.dumps(required)
-        assert " -m yadori " not in json.dumps(required)
-        servers = _mapping(mcp["mcpServers"])
-        assert "yadori_memory" in servers
-        mcp["mcpServers"] = {key: value for key, value in servers.items() if key != "yadori_memory"}
-        assert mcp == {
-            "mcpServers": {
-                "user": {"command": "user-server"},
-                "approved": {"command": "server", "args": ["relative.toml"]},
-                "local": {"command": "local-server"},
-            }
-        }
-        assert prepared.environment["SAFE"] == "kept"
-        assert "ANTHROPIC_API_KEY" not in prepared.environment
-        assert prepared.environment["CLAUDE_CONFIG_DIR"] == str(prepared.run_dir)
-        assert prepared.environment["CLAUDE_CODE_PLUGIN_SEED_DIR"] == str(usual / "plugins")
-        assert "--strict-mcp-config" in prepared.argv
-        linked = prepared.run_dir / ".credentials.json"
-        assert linked.is_symlink() and linked.resolve() == credential.resolve()
-        assert (prepared.run_dir / "skills" / "root-skill" / "SKILL.md").is_file()
-    finally:
-        session.finish(prepared)
-
-    assert not prepared.run_dir.exists()
-
-
-def test_IT_068_001_信頼していない作業設定は普段のClaudeで先に確認させる(
-    tmp_path: Path,
-) -> None:
-    usual = tmp_path / "usual"
-    workspace = tmp_path / "workspace"
-    nested = workspace / "nested"
-    _init_git(workspace)
-    nested.mkdir()
-    skill = workspace / ".claude" / "skills" / "untrusted" / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    _ = skill.write_text("まだ信頼していない指示", encoding="utf-8")
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        nested,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    with pytest.raises(ClaudeSessionError, match="まだ信頼されていません"):
-        _ = session.prepare()
-
-
-def test_IT_068_001_利用可否を決めていないMCPは普段のClaudeで先に確認させる(
-    tmp_path: Path,
-) -> None:
-    usual = tmp_path / "usual"
-    workspace = tmp_path / "workspace"
-    _init_git(workspace)
-    _write_json(workspace / ".mcp.json", {"mcpServers": {"pending": {"command": "server"}}})
-    _write_json(
-        usual / ".claude.json",
-        {"projects": {str(workspace): {"hasTrustDialogAccepted": True}}},
-    )
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        workspace,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    with pytest.raises(ClaudeSessionError, match="まだ利用可否が決まっていません"):
-        _ = session.prepare()
-
-
-def test_IT_068_001_設定が定額契約以外の接続先を選ぶなら起動しない(tmp_path: Path) -> None:
-    usual = tmp_path / "usual"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    _write_json(usual / "settings.json", {"env": {"ANTHROPIC_API_KEY": "従量課金"}})
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        workspace,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    with pytest.raises(ClaudeSessionError, match="従量課金または別の接続先"):
-        _ = session.prepare()
-
-
-@pytest.mark.parametrize(
-    ("kind", "message"),
-    [
-        ("not-logged-in", "ログインしていません"),
-        ("broken-json", "認証状態を読めない"),
-        ("other-provider", "定額契約以外"),
-        ("timeout", "定額契約を確認できない"),
-    ],
-)
-def test_IT_068_001_定額契約を確認できなければClaude本体を起動しない(
-    kind: str, message: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launched: list[bool] = []
-
-    def checked(
-        command: object, *args: object, **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
-        del args, kwargs
-        assert isinstance(command, list)
-        checked_command: list[str] = []
-        for item in command:  # pyright: ignore[reportUnknownVariableType]
-            assert isinstance(item, str)
-            checked_command.append(item)
-        if checked_command and checked_command[0] == "git":
-            return subprocess.CompletedProcess(checked_command, 1, "", "not a repository")
-        if kind == "timeout":
-            raise subprocess.TimeoutExpired(checked_command, 30)
-        if kind == "not-logged-in":
-            return subprocess.CompletedProcess(checked_command, 1, "{}", "")
-        if kind == "broken-json":
-            return subprocess.CompletedProcess(checked_command, 0, "not-json", "")
-        return subprocess.CompletedProcess(
-            checked_command,
-            0,
-            json.dumps({"loggedIn": True, "authMethod": "apiKey", "apiProvider": "firstParty"}),
-            "",
-        )
-
-    def launch(*args: object, **kwargs: object) -> int:
-        del args, kwargs
-        launched.append(True)
-        return 0
-
-    monkeypatch.setattr("yadori.adapter.tool.claude_session.subprocess.run", checked)
-    monkeypatch.setattr("yadori.adapter.tool.claude_session.subprocess.call", launch)
-    session = ClaudeSession(tmp_path / "yadori", workspace, executable="/bin/true")
-
-    with pytest.raises(ClaudeSessionError, match=message):
-        _ = session.launch()
-
-    assert launched == []
-    assert list((tmp_path / "yadori" / "claude" / "sessions").iterdir()) == []
-
-
-@pytest.mark.parametrize("kind", ["user", "local", "project"])
-def test_IT_068_001_壊れたMCP設定は道具なしで続けず起動しない(tmp_path: Path, kind: str) -> None:
-    usual = tmp_path / "usual"
-    workspace = tmp_path / "workspace"
-    _init_git(workspace)
-    project_state: dict[str, object] = {"hasTrustDialogAccepted": True}
-    state: dict[str, object] = {"projects": {str(workspace): project_state}}
-    if kind == "user":
-        state["mcpServers"] = []
-    elif kind == "local":
-        project_state["mcpServers"] = []
-    else:
-        _write_json(workspace / ".mcp.json", {"mcpServers": []})
-    _write_json(usual / ".claude.json", state)
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        workspace,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    with pytest.raises(ClaudeSessionError, match="MCP 設定の形が違います"):
-        _ = session.prepare()
-
-
-def test_IT_068_001_相対の普段設定も起動場所から同じ認証を参照する(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    usual = workspace / ".claude-alt"
-    usual.mkdir()
-    credential = usual / ".credentials.json"
-    _ = credential.write_text("{}", encoding="utf-8")
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        workspace,
-        {"CLAUDE_CONFIG_DIR": ".claude-alt"},
-        executable="/bin/true",
-    )
-
-    prepared = session.prepare()
-    try:
-        linked = prepared.run_dir / ".credentials.json"
-        assert linked.is_symlink() and linked.resolve() == credential.resolve()
-    finally:
-        session.finish(prepared)
 
 
 def test_IT_068_001_作業場所の同名Pythonパッケージをフック入口より先に読まない(
@@ -447,152 +86,6 @@ def test_IT_068_001_作業場所の同名Pythonパッケージをフック入口
 
     assert done.returncode == 1 and "使い方" in done.stderr
     assert not touched.exists()
-
-
-def test_IT_068_001_worktreeは元の作業場所の信頼と手元設定を借りる(tmp_path: Path) -> None:
-    usual = tmp_path / "usual"
-    main = tmp_path / "main"
-    worktree = tmp_path / "worktree"
-    main.mkdir()
-    git_environment = _without_parent_git()
-    _ = subprocess.run(["git", "init", "-q", str(main)], check=True, env=git_environment)
-    _ = (main / "README.md").write_text("test\n", encoding="utf-8")
-    _ = subprocess.run(
-        ["git", "-C", str(main), "add", "README.md"], check=True, env=git_environment
-    )
-    _ = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(main),
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "test",
-        ],
-        check=True,
-        env=git_environment,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(main), "worktree", "add", "-qb", "test", str(worktree)],
-        check=True,
-        env=git_environment,
-    )
-    _write_json(
-        main / ".claude" / "settings.local.json",
-        {"permissions": {"deny": ["Read(/private/**)"]}},
-    )
-    _write_json(
-        usual / ".claude.json",
-        {
-            "projects": {
-                str(main): {
-                    "hasTrustDialogAccepted": True,
-                    "mcpServers": {"worktree-local": {"command": "local-server"}},
-                },
-                str(worktree): {"hasTrustDialogAccepted": False},
-            }
-        },
-    )
-    skill = worktree / ".claude" / "skills" / "from-worktree" / "SKILL.md"
-    skill.parent.mkdir(parents=True)
-    _ = skill.write_text("worktree側の指示", encoding="utf-8")
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        worktree,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    prepared = session.prepare()
-    try:
-        state = _mapping(_object(prepared.run_dir / ".claude.json")["projects"])
-        permissions = _mapping(_object(prepared.run_dir / "settings.json")["permissions"])
-        mcp = _object(prepared.run_dir / "mcp.json")
-        assert set(state) == {str(main)}
-        assert permissions["deny"] == [f"Read(//{worktree.as_posix().lstrip('/')}/private/**)"]
-        servers = _mapping(mcp["mcpServers"])
-        assert "yadori_memory" in servers
-        mcp["mcpServers"] = {key: value for key, value in servers.items() if key != "yadori_memory"}
-        assert mcp == {"mcpServers": {"worktree-local": {"command": "local-server"}}}
-        assert (prepared.run_dir / "skills" / "from-worktree" / "SKILL.md").is_file()
-    finally:
-        session.finish(prepared)
-
-    _write_json(
-        usual / ".claude.json",
-        {
-            "projects": {
-                str(main): {"hasTrustDialogAccepted": False},
-                str(worktree): {"hasTrustDialogAccepted": True},
-            }
-        },
-    )
-    with pytest.raises(ClaudeSessionError, match="まだ信頼されていません"):
-        _ = session.prepare()
-
-
-def test_IT_068_001_worktreeの元を確定できなければ古い信頼記録で起動しない(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    usual = tmp_path / "usual"
-    main = tmp_path / "main"
-    worktree = tmp_path / "worktree"
-    main.mkdir()
-    git_environment = _without_parent_git()
-    _ = subprocess.run(["git", "init", "-q", str(main)], check=True, env=git_environment)
-    _ = (main / "README.md").write_text("test\n", encoding="utf-8")
-    _ = subprocess.run(
-        ["git", "-C", str(main), "add", "README.md"], check=True, env=git_environment
-    )
-    _ = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(main),
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "test",
-        ],
-        check=True,
-        env=git_environment,
-    )
-    _ = subprocess.run(
-        ["git", "-C", str(main), "worktree", "add", "-qb", "test", str(worktree)],
-        check=True,
-        env=git_environment,
-    )
-    _write_json(
-        usual / ".claude.json",
-        {
-            "projects": {
-                str(main): {"hasTrustDialogAccepted": False},
-                str(worktree): {"hasTrustDialogAccepted": True},
-            }
-        },
-    )
-
-    def failed_git(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        del args, kwargs
-        return subprocess.CompletedProcess(["git"], 1, "", "temporary failure")
-
-    monkeypatch.setattr("yadori.adapter.tool.claude_session.subprocess.run", failed_git)
-    session = ClaudeSession(
-        tmp_path / "yadori",
-        worktree,
-        {"CLAUDE_CONFIG_DIR": str(usual)},
-        executable="/bin/true",
-    )
-
-    with pytest.raises(ClaudeSessionError, match="信頼を照合できない"):
-        _ = session.prepare()
 
 
 def test_IT_068_002_一往復を一度だけ覚えて同じ停止通知は増やさない(
@@ -750,6 +243,7 @@ def test_IT_068_003_保存に失敗した返事は止めて未完から再び保
         assert memories.count_episodes("sora") == 1
     finally:
         memories.close()
+    assert _hook("SessionEnd", {"session_id": session_id}, run_dir, home, monkeypatch) == 0
     assert not (run_dir / "pending" / f"{session_id}.json").exists()
 
 
@@ -792,6 +286,7 @@ def test_IT_068_003_完了印の保存に失敗しても未完を残して再送
         memories.close()
 
     assert _hook("Stop", stopped, run_dir, home, monkeypatch) == 0
+    assert _hook("SessionEnd", {"session_id": session_id}, run_dir, home, monkeypatch) == 0
     assert not (run_dir / "pending" / f"{session_id}.json").exists()
 
 
@@ -924,3 +419,58 @@ def test_IT_068_004_省略が不要な短い記憶は上限ぎりぎりでも渡
     assert len(response.encode("utf-8")) == 9000
     assert "夢で残した要点" in response
     assert "長さの上限により" not in response
+
+
+def test_ST_102_001_IT_102_001_Stopフックの継続を保存し検索予算と再送を保つ(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from yadori.adapter.recall.ledger import RecallLedger
+    from yadori.domain.recall.model import RecallFailure
+
+    home = _home(tmp_path / "home")
+    run = home / "claude/sessions/continuation"
+    run.mkdir(parents=True)
+    session, prompt = str(uuid.uuid4()), str(uuid.uuid4())
+    assert (
+        _hook(
+            "UserPromptSubmit",
+            {"session_id": session, "prompt_id": prompt, "prompt": "確認してください"},
+            run,
+            home,
+            monkeypatch,
+        )
+        == 0
+    )
+    _ = capsys.readouterr()
+    first = {
+        "session_id": session,
+        "prompt_id": prompt,
+        "stop_hook_active": False,
+        "last_assistant_message": "最初の確認結果です。\n【気持ち】+0.1 確認",
+    }
+    continued = {
+        **first,
+        "stop_hook_active": True,
+        "last_assistant_message": "追加確認も完了しました。\n【気持ち】+0.2 完了",
+    }
+    assert _hook("Stop", first, run, home, monkeypatch) == 0
+    ledger = RecallLedger(run, "sora")
+    token = ledger.begin(f"{session}:{prompt}", [])
+    ticket = ledger.reserve(token, "search", "first search")
+    assert ticket.attempt > 0
+    assert _hook("Stop", continued, run, home, monkeypatch) == 0
+    assert _hook("Stop", continued, run, home, monkeypatch) == 0
+    assert _hook("Stop", first, run, home, monkeypatch) == 0
+    assert "block" not in capsys.readouterr().out
+    assert ledger.reserve(token, "get", "continuation read").attempt > ticket.attempt
+    assert _hook("SessionEnd", {"session_id": session}, run, home, monkeypatch) == 0
+    with pytest.raises(RecallFailure):
+        _ = ledger.reserve(token, "get", "after end")
+    store = SqliteMemories(home / "memories.sqlite")
+    try:
+        assert store.count_episodes("sora") == 2
+        rows = store.recent("sora", 2)
+        assert {row.reply for row in rows} == {"最初の確認結果です。", "追加確認も完了しました。"}
+        assert sum(row.source == f"claude:{prompt}" for row in rows) == 1
+    finally:
+        store.close()

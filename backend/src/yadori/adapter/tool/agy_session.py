@@ -10,7 +10,7 @@ import subprocess
 import sys
 import termios
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, final
@@ -46,12 +46,14 @@ class AgySession:
         self._environment = dict(os.environ if environment is None else environment)
         self._usual = Path.home() / ".gemini"
 
-    def launch(self) -> int:
+    def launch(self, arguments: Sequence[str] = ()) -> int:
         prepared = self.prepare()
         terminal = termios.tcgetattr(sys.stdin.fileno()) if sys.stdin.isatty() else None
         code = 1
         try:
-            code = subprocess.call(prepared.argv, cwd=self._cwd, env=prepared.environment)
+            code = subprocess.call(
+                [*prepared.argv, *arguments], cwd=self._cwd, env=prepared.environment
+            )
             return 1 if (prepared.run_dir / "failed").exists() else code
         finally:
             if terminal is not None:
@@ -59,6 +61,8 @@ class AgySession:
             self.finish(prepared, code)
 
     def prepare(self) -> PreparedAgy:
+        if not self._internal:
+            return self._regular()
         if sys.platform != "linux":
             raise ValueError("宿りの agy 対応は Linux 用です")
         for name in ("agy", "bwrap", "timeout"):
@@ -68,8 +72,6 @@ class AgySession:
                 )
         if self._home.is_relative_to(self._usual) or self._cwd.is_relative_to(self._usual):
             raise ValueError("agy の設定置き場を宿りの保存先・作業場所には使えません")
-        if not self._internal:
-            self._check_memory_connection()
         settings = self._settings()
         onboarding = self._onboarding()
         version = subprocess.run(
@@ -100,11 +102,57 @@ class AgySession:
             shutil.rmtree(run_dir)
             raise
 
+    def _regular(self) -> PreparedAgy:
+        self._check_memory_connection()
+        for name in ("agy", "timeout"):
+            if shutil.which(name, path=self._environment.get("PATH")) is None:
+                raise ValueError(f"{name} がありません。先に導入してください")
+        sessions = self._home / "agy/sessions"
+        sessions.mkdir(parents=True, exist_ok=True, mode=0o700)
+        run_dir = sessions / uuid.uuid4().hex
+        run_dir.mkdir(mode=0o700)
+        lock = (run_dir / "session.lock").open("w", encoding="utf-8")
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            config = run_dir / ".agents"
+            config.mkdir(mode=0o700)
+            (run_dir / "turns").mkdir(mode=0o700)
+            _ = (run_dir / "transcript-root").write_text(
+                str(self._usual / "antigravity-cli/brain"), encoding="utf-8"
+            )
+            hooks: dict[str, object] = {}
+            entry = Path(sys.executable).with_name("yadori").resolve()
+            for event, name in (("PreInvocation", "pre"), ("Stop", "stop")):
+                command = shlex.join(
+                    ["timeout", "-k", "2s", "20s", str(entry), "_agy-hook", name, str(run_dir)]
+                )
+                command += (
+                    f" || {{ touch {shlex.quote(str(run_dir / 'failed'))} "
+                    + f'{shlex.quote(str(run_dir / ("failed-" + name)))}; kill -TERM "$PPID"; }}'
+                )
+                hooks[event] = [{"type": "command", "command": command, "timeout": 30}]
+            AgyJson.write(config / "hooks.json", {"yadori": hooks})
+            AgyJson.write(
+                config / "mcp_config.json",
+                {
+                    "mcpServers": {
+                        NAME: MemoryConnection.command(run_dir, self._home, self._environment)
+                    }
+                },
+            )
+            environment = dict(self._environment)
+            environment["YADORI_HOME"] = str(self._home)
+            return PreparedAgy(run_dir, ("agy", "--add-dir", str(run_dir)), environment, lock)
+        except BaseException:
+            lock.close()
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
+
     def finish(self, prepared: PreparedAgy, returncode: int = 1) -> None:
         try:
             records = [
                 AgyJson.object(path.read_text(encoding="utf-8"))
-                for path in (prepared.run_dir / "turns").glob("*.json")
+                for path in (prepared.run_dir / "turns").rglob("*.json")
             ]
             unresolved = any(row.get("saved") is not True for row in records)
             if returncode != 0 or (prepared.run_dir / "failed").exists() or unresolved:
@@ -177,23 +225,6 @@ class AgySession:
                 "enableTelemetry": settings.get("enableTelemetry", False),
             }
         )
-        if not self._internal:
-            sources = [settings]
-            roots = {
-                self._usual / "config",
-                *(parent / ".agents" for parent in (self._cwd, *self._cwd.parents)),
-            }
-            for root in roots:
-                for filename in ("settings.json", "config.json"):
-                    path = root / filename
-                    if path.is_file():
-                        text = path.read_text(encoding="utf-8").strip()
-                        if text:
-                            sources.append(AgyJson.object(text))
-            try:
-                borrowed["permissions"] = MemoryConnection.agy_permissions(sources)
-            except MemoryConnectionError as trouble:
-                raise ValueError(str(trouble)) from trouble
         return borrowed
 
     def _onboarding(self) -> dict[str, object]:
@@ -234,58 +265,11 @@ class AgySession:
         AgyJson.write(data / "settings.json", settings)
         AgyJson.write(data / "cache/onboarding.json", onboarding)
         agent = (
-            "---\nname: yadori\ndescription: 宿りとして作業に付き添う\n"
-            "mainAgent: true\nsubagent: false\nexcludeDefaultComponents: false\n"
-            "commandExecutionPolicy: off\ntools:\n"
-            "  - view_file\n  - list_dir\n  - find_by_name\n  - grep_search\n"
-            "  - write_to_file\n  - replace_file_content\n  - multi_replace_file_content\n"
-            "  - run_command\n---\n"
-            "あなたの名乗りと記憶は、発話前に渡される宿りの文脈に従います。"
-            "下位担当、予約、背景作業、別の会話への切替は使いません。\n"
+            "---\nname: yadori\ndescription: 渡された文章だけから結果を返す\n"
+            "mainAgent: true\nsubagent: false\nexcludeDefaultComponents: true\n"
+            "tools: []\n---\n渡された指示に従い文章だけを返してください。"
         )
-        if self._internal:
-            agent = (
-                "---\nname: yadori\ndescription: 渡された文章だけから結果を返す\n"
-                "mainAgent: true\nsubagent: false\nexcludeDefaultComponents: true\n"
-                "tools: []\n---\n渡された指示に従い文章だけを返してください。"
-            )
         _ = (config / "agents/yadori/agent.md").write_text(agent, encoding="utf-8")
-        if self._internal:
-            return
-        AgyJson.write(
-            config / "mcp_config.json",
-            {
-                "mcpServers": {
-                    NAME: MemoryConnection.command(run_dir, self._home, self._environment)
-                }
-            },
-        )
-        hooks: dict[str, object] = {}
-        for event, name in (("PreInvocation", "pre"), ("Stop", "stop"), ("PreToolUse", "tool")):
-            command = shlex.join(
-                [
-                    "timeout",
-                    "-k",
-                    "2s",
-                    "20s",
-                    sys.executable,
-                    "-I",
-                    "-m",
-                    "yadori",
-                    "_agy-hook",
-                    name,
-                    str(run_dir),
-                ]
-            )
-            # agy はフックの失敗を無視するため、通知元の起動自体へ失敗を伝える。
-            command = f"printf %s {name} > {shlex.quote(str(run_dir / 'stage'))} && " + command
-            command += (
-                f" || {{ touch {shlex.quote(str(run_dir / 'failed'))} "
-                + f'{shlex.quote(str(run_dir / ("failed-" + name)))}; kill -TERM "$PPID"; }}'
-            )
-            handler = {"type": "command", "command": command, "timeout": 30}
-            hooks[event] = [{"matcher": "*", "hooks": [handler]}] if name == "tool" else [handler]
-        AgyJson.write(config / "hooks.json", {"yadori": hooks})
 
     def _child_environment(self) -> dict[str, str]:
         blocked_prefixes = ("AGY_", "ANTIGRAVITY_", "CASCADE_", "GIT_", "GOOGLE_", "GEMINI_")

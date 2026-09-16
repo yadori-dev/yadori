@@ -24,7 +24,7 @@ yadoriは、Claude Code・Codex・agyでの会話に、続く記憶と名乗り�
 
 - Ubuntu 24.04 / 26.04 または Debian 13（amd64）
 - 導入・ログイン済みの **Codex、Claude Code、agyのいずれか**。AIのCLI本体と利用契約は別途必要です。
-- agyを使う場合は `bubblewrap`。対応版と事前設定は[道具別ガイド](docs/100_usage/cli.md)を参照してください。
+- agyを内部の要約・判定にも使う場合は `bubblewrap`。[道具別ガイド](docs/100_usage/cli.md)を参照してください。
 
 ### インストール
 
@@ -48,7 +48,7 @@ yadori          # 選んだ道具を宿りとして起動
 
 初回は検索用モデルを取得します。起動前に取り込むログとdreamの実行方法も選べます。設定は後から `yadori setting` で変更できます。
 
-道具を指定したいときは `yadori claude`、`yadori codex`、`yadori agy` を使います。専用の端末チャットは `yadori chat` です。
+道具を指定したいときは `yadori claude`、`yadori codex`、`yadori agy` を使います。専用の端末チャットは `yadori chat` です。普段の設定と会話履歴を使い、`yadori claude --resume`、`yadori codex resume --last`、`yadori agy --continue` で再開できます。
 
 ## よく使うコマンド
 

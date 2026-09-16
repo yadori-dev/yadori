@@ -127,28 +127,6 @@ def test_IT_082_004_作業場所やPYTHONPATHの同名コードを起動しな�
     assert "記憶の接続を起動できません" in result.stderr
 
 
-@pytest.mark.parametrize("key", ["disabledMcpServers", "disabledMcpjsonServers"])
-def test_ST_082_007_Claudeの無効化指定があれば理由を示して起動を断る(
-    tmp_path: Path, key: str
-) -> None:
-    from yadori.adapter.tool.claude_session import ClaudeSession, ClaudeSessionError
-
-    home = tmp_path / "home"
-    work = tmp_path / "work"
-    usual = tmp_path / "usual"
-    home.mkdir()
-    work.mkdir()
-    usual.mkdir()
-    _ = (usual / ".claude.json").write_text(
-        json.dumps({"projects": {str(work): {key: ["yadori_memory"]}}})
-    )
-    session = ClaudeSession(
-        home, cwd=work, environment={"CLAUDE_CONFIG_DIR": str(usual)}, executable=sys.executable
-    )
-    with pytest.raises(ClaudeSessionError, match="無効化"):
-        _ = session.prepare()
-
-
 def test_IT_082_004_Codexの接続設定を階層を保って書く(tmp_path: Path) -> None:
     import tomllib
 
@@ -165,7 +143,7 @@ def test_IT_082_004_Codexの接続設定を階層を保って書く(tmp_path: Pa
     )
     prepared = session.prepare()
     try:
-        data: dict[str, object] = tomllib.loads((prepared.run_dir / "config.toml").read_text())
+        data: dict[str, object] = tomllib.loads("\n".join(prepared.argv[2::2]))
         servers = data["mcp_servers"]
         assert isinstance(servers, dict)
         server: object = servers["yadori_memory"]  # pyright: ignore[reportUnknownVariableType]
@@ -198,9 +176,11 @@ def test_IT_082_004_完了済みの初期案内を保ち口座情報や他履歴
     )
     prepared = session.prepare()
     try:
-        copied = parsed((prepared.run_dir / ".claude.json").read_text())
+        assert not (prepared.run_dir / ".claude.json").exists()
+        assert prepared.environment["CLAUDE_CONFIG_DIR"] == str(usual)
+        copied = parsed((usual / ".claude.json").read_text())
         assert copied["hasCompletedOnboarding"] is True
         assert copied["lastOnboardingVersion"] == "2.1.72" and copied["theme"] == "light"
-        assert "oauthAccount" not in copied and "history" not in copied
+        assert copied == state
     finally:
         session.finish(prepared)
