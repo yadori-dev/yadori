@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import final
@@ -35,6 +36,11 @@ class _Pending:
     context: str
     spoken: Spoken | None = None
     previous_source: str | None = None
+    completion_id: str | None = None
+
+    @property
+    def source(self) -> str:
+        return f"claude:{self.completion_id or self.prompt_id}"
 
 
 @final
@@ -163,37 +169,46 @@ class ClaudeHook:
         session_id = self._identifier(payload, "session_id")
         prompt_id = self._identifier(payload, "prompt_id")
         completed = self._read_completed(prompt_id)
-        if completed is not None:
-            replayed = self._words.parted(self._text(payload, "last_assistant_message"))
-            if replayed != completed:
-                return self._block("同じ発話へ以前と異なる返事または気持ちが届きました")
-            return 0
         pending = self._read_pending(session_id)
+        if completed is None and (pending is None or pending.prompt_id != prompt_id):
+            return 0
+        spoken = self._words.parted(self._text(payload, "last_assistant_message"))
+        if completed is not None:
+            if spoken == completed:
+                return 0
+            if payload.get("stop_hook_active") is not True:
+                return self._block("同じ発話へ以前と異なる返事または気持ちが届きました")
         if pending is None or pending.prompt_id != prompt_id:
             return 0
         try:
-            spoken = self._words.parted(self._text(payload, "last_assistant_message"))
-            pending = _Pending(
-                pending.session_id,
-                pending.prompt_id,
-                pending.utterance,
-                pending.recalled_at,
-                pending.identity_version,
-                pending.context,
-                spoken,
-                pending.previous_source,
-            )
+            if pending.spoken is not None and pending.spoken != spoken:
+                if payload.get("stop_hook_active") is not True:
+                    return self._block("同じ発話へ以前と異なる返事または気持ちが届きました")
+                self._remember(pending)
+                self._mark_completed(pending.completion_id or prompt_id, pending.spoken)
+                if completed is None:
+                    completed = pending.spoken
+            completion_id = prompt_id
+            if completed is not None:
+                completion_id = self._continuation_id(prompt_id, spoken)
+                if self._read_completed(completion_id) == spoken:
+                    return 0
+                previous = self._continuity.begin(session_id, f"claude:{completion_id}")
+                pending = replace(pending, previous_source=previous, completion_id=completion_id)
+            pending = replace(pending, spoken=spoken)
             self._write_pending(pending)
             self._remember(pending)
-            self._end_recall(session_id, prompt_id)
-        except (CannotSpeak, RememberingConflict, RuntimeError, sqlite3.Error) as trouble:
+        except (CannotSpeak, RememberingConflict, RuntimeError, sqlite3.Error, OSError) as trouble:
             return self._block(f"宿りがこの一往復を覚えられませんでした: {trouble}")
         try:
-            self._mark_completed(prompt_id, spoken)
+            self._mark_completed(completion_id, spoken)
         except OSError as trouble:
             return self._block(f"完了した一往復の再送確認を残せませんでした: {trouble}")
-        self._discard(session_id)
         return 0
+
+    def _continuation_id(self, prompt_id: str, spoken: Spoken) -> str:
+        content = json.dumps([spoken.reply, spoken.moved.delta, spoken.moved.cause])
+        return prompt_id + "-" + hashlib.sha256(content.encode()).hexdigest()
 
     def _block(self, reason: str) -> int:
         print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
@@ -236,12 +251,12 @@ class ClaudeHook:
                 pending.spoken.reply,
                 pending.spoken.moved,
                 recalled_at=pending.recalled_at,
-                source=f"claude:{pending.prompt_id}",
+                source=pending.source,
                 identity_version=pending.identity_version,
                 session_id=f"claude:{pending.session_id}",
                 previous_source=pending.previous_source,
             )
-            self._continuity.finish(pending.session_id, f"claude:{pending.prompt_id}")
+            self._continuity.finish(pending.session_id, pending.source)
         finally:
             memories.close()
 
@@ -275,6 +290,7 @@ class ClaudeHook:
             "identity_version": pending.identity_version,
             "context": pending.context,
             "previous_source": pending.previous_source,
+            "completion_id": pending.completion_id,
         }
         if pending.spoken is not None:
             value["reply"] = pending.spoken.reply
@@ -309,6 +325,7 @@ class ClaudeHook:
             self._text(value, "context"),
             spoken,
             self._optional_source(value.get("previous_source")),
+            self._optional_source(value.get("completion_id")),
         )
 
     def _optional_source(self, value: object) -> str | None:

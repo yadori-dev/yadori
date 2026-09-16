@@ -114,7 +114,7 @@ class ClaudeRecords:
     def read(self, rows: list[dict[str, object]]) -> LogContents:
         known: dict[str, dict[str, object]] = {}
         users: dict[str, dict[str, object]] = {}
-        complete: dict[str, ExternalConversation] = {}
+        complete: dict[str, list[ExternalConversation]] = {}
         held: dict[str, list[ExternalConversation]] = {}
         notices: list[str] = []
         for row in rows:
@@ -162,14 +162,28 @@ class ClaudeRecords:
                 if result not in held[turn]:
                     held[turn].append(result)
                 continue
-            if turn in complete and complete[turn] != result:
-                earlier = complete[turn]
+            if turn in complete:
+                earlier = complete[turn][-1]
                 if self._descends(row, earlier.answer, known):
-                    complete[turn] = replace(result, reply=earlier.reply + "\n\n" + result.reply)
+                    complete[turn].append(
+                        replace(
+                            result,
+                            turn=f"{turn}:{identifier}",
+                            previous=earlier.turn,
+                            native_turn=result.native_turn or turn,
+                        )
+                    )
                     continue
-                held[turn] = [complete.pop(turn), result]
+                original_previous = complete[turn][0].previous
+                held[turn] = [
+                    *(
+                        replace(one, turn=turn, previous=original_previous)
+                        for one in complete.pop(turn)
+                    ),
+                    result,
+                ]
                 continue
-            complete[turn] = result
+            complete[turn] = [result]
         if not any("sessionId" in row for row in rows):
             raise ImportFailed("Claudeのセッション原文ではありません")
         if pending := len(users.keys() - complete.keys() - held.keys()):
@@ -179,7 +193,7 @@ class ClaudeRecords:
                 f"Claude: 複数の完成応対がある {len(held)} 発話を保留しました"
                 + "（今回の取り込みと既存記録の照合は行いません）"
             )
-        originals = tuple(complete.values())
+        originals = tuple(one for group in complete.values() for one in group)
         return LogContents(
             originals, tuple(notices), tuple(one for group in held.values() for one in group)
         )
@@ -253,6 +267,8 @@ class ClaudeRecords:
     def _companion(self, row: dict[str, object], known: dict[str, dict[str, object]]) -> bool:
         if row.get("isMeta") is not True or row.get("isSidechain"):
             return False
+        if self._content(row).startswith("Stop hook feedback:\n"):
+            return self._stop_feedback(row, known)
         if self._skill_companion(row):
             return True
         image = (
@@ -291,6 +307,39 @@ class ClaudeRecords:
                 part.get("type") == "tool_result" for part in RecordJson.objects(content)
             ):
                 return False
+            parent = RecordJson.text(found, "parentUuid")
+        return False
+
+    def _stop_feedback(self, row: dict[str, object], known: dict[str, dict[str, object]]) -> bool:
+        marker = "Stop hook feedback:\n"
+        prompt = RecordJson.text(row, "promptId")
+        if not prompt or not self._content(row).startswith(marker):
+            return False
+        parent = RecordJson.text(row, "parentUuid")
+        seen: set[str] = set()
+        while parent and parent not in seen:
+            seen.add(parent)
+            found = known.get(parent)
+            if (
+                found is None
+                or found.get("sessionId") != row.get("sessionId")
+                or found.get("isSidechain")
+            ):
+                return False
+            if found.get("type") == "user":
+                if self._user(found):
+                    return RecordJson.text(found, "promptId") == prompt
+                parts = RecordJson.objects(RecordJson.mapping(found.get("message")).get("content"))
+                if any(part.get("type") == "tool_result" for part in parts):
+                    pass
+                elif self._content(found).startswith(marker):
+                    if (
+                        found.get("isMeta") is not True
+                        or RecordJson.text(found, "promptId") != prompt
+                    ):
+                        return False
+                elif not self._companion(found, known):
+                    return False
             parent = RecordJson.text(found, "parentUuid")
         return False
 

@@ -243,6 +243,7 @@ def test_IT_068_003_保存に失敗した返事は止めて未完から再び保
         assert memories.count_episodes("sora") == 1
     finally:
         memories.close()
+    assert _hook("SessionEnd", {"session_id": session_id}, run_dir, home, monkeypatch) == 0
     assert not (run_dir / "pending" / f"{session_id}.json").exists()
 
 
@@ -285,6 +286,7 @@ def test_IT_068_003_完了印の保存に失敗しても未完を残して再送
         memories.close()
 
     assert _hook("Stop", stopped, run_dir, home, monkeypatch) == 0
+    assert _hook("SessionEnd", {"session_id": session_id}, run_dir, home, monkeypatch) == 0
     assert not (run_dir / "pending" / f"{session_id}.json").exists()
 
 
@@ -417,3 +419,58 @@ def test_IT_068_004_省略が不要な短い記憶は上限ぎりぎりでも渡
     assert len(response.encode("utf-8")) == 9000
     assert "夢で残した要点" in response
     assert "長さの上限により" not in response
+
+
+def test_ST_102_001_IT_102_001_Stopフックの継続を保存し検索予算と再送を保つ(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from yadori.adapter.recall.ledger import RecallLedger
+    from yadori.domain.recall.model import RecallFailure
+
+    home = _home(tmp_path / "home")
+    run = home / "claude/sessions/continuation"
+    run.mkdir(parents=True)
+    session, prompt = str(uuid.uuid4()), str(uuid.uuid4())
+    assert (
+        _hook(
+            "UserPromptSubmit",
+            {"session_id": session, "prompt_id": prompt, "prompt": "確認してください"},
+            run,
+            home,
+            monkeypatch,
+        )
+        == 0
+    )
+    _ = capsys.readouterr()
+    first = {
+        "session_id": session,
+        "prompt_id": prompt,
+        "stop_hook_active": False,
+        "last_assistant_message": "最初の確認結果です。\n【気持ち】+0.1 確認",
+    }
+    continued = {
+        **first,
+        "stop_hook_active": True,
+        "last_assistant_message": "追加確認も完了しました。\n【気持ち】+0.2 完了",
+    }
+    assert _hook("Stop", first, run, home, monkeypatch) == 0
+    ledger = RecallLedger(run, "sora")
+    token = ledger.begin(f"{session}:{prompt}", [])
+    ticket = ledger.reserve(token, "search", "first search")
+    assert ticket.attempt > 0
+    assert _hook("Stop", continued, run, home, monkeypatch) == 0
+    assert _hook("Stop", continued, run, home, monkeypatch) == 0
+    assert _hook("Stop", first, run, home, monkeypatch) == 0
+    assert "block" not in capsys.readouterr().out
+    assert ledger.reserve(token, "get", "continuation read").attempt > ticket.attempt
+    assert _hook("SessionEnd", {"session_id": session}, run, home, monkeypatch) == 0
+    with pytest.raises(RecallFailure):
+        _ = ledger.reserve(token, "get", "after end")
+    store = SqliteMemories(home / "memories.sqlite")
+    try:
+        assert store.count_episodes("sora") == 2
+        rows = store.recent("sora", 2)
+        assert {row.reply for row in rows} == {"最初の確認結果です。", "追加確認も完了しました。"}
+        assert sum(row.source == f"claude:{prompt}" for row in rows) == 1
+    finally:
+        store.close()

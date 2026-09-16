@@ -213,14 +213,16 @@ def test_ST_102_003_IT_102_002_直列の完成応対は順序を保ち重複行�
     rows.insert(5, rows[4].copy())
     result = SessionLogs().read("claude", log(tmp_path / "linear.jsonl", rows))
     assert not result.held
-    assert result.conversations[0].reply == "応対X\n\n応対Y\n\n応対Z"
-    assert result.conversations[0].answer == "a3"
+    assert [one.reply for one in result.conversations[:3]] == ["応対X", "応対Y", "応対Z"]
+    assert result.conversations[2].answer == "a3"
     assert result.conversations[1].previous == "u1"
+    assert result.conversations[2].previous == "u1:a2"
+    assert result.conversations[3].previous == "u1"
     importing = Importing(SqliteArchive(tmp_path / "memory.sqlite"), "person")
     pairs = CharacterPairs()
-    assert importing.apply(importing.preview_logs([result]), pairs) == 2
+    assert importing.apply(importing.preview_logs([result]), pairs) == 4
     again = importing.preview_logs([result])
-    assert not again.added and again.existing == 2 and not again.held
+    assert not again.added and again.existing == 4 and not again.held
 
 
 def test_ST_102_003_IT_102_002_ログ行とは別の発話識別子で宿り自身の記録を除く(
@@ -255,3 +257,59 @@ def test_ST_102_003_IT_102_002_ログ行とは別の発話識別子で宿り自�
         memories.close()
     plan = Importing(SqliteArchive(database), "person").preview_logs([result])
     assert plan.native == 1 and not plan.added
+
+
+def test_ST_102_003_IT_102_002_取り込み後に返事が続いても原文を変えず追記する(
+    tmp_path: Path,
+) -> None:
+    rows = ambiguous()
+    rows[2]["parentUuid"] = "a1"
+    path = tmp_path / "growing.jsonl"
+    archive = SqliteArchive(tmp_path / "memory.sqlite")
+    importing = Importing(archive, "person")
+    pairs = CharacterPairs()
+    first = SessionLogs().read("claude", log(path, rows[:2]))
+    assert importing.apply(importing.preview_logs([first]), pairs) == 1
+    original = archive.existing("person", first.conversations[0].source)
+    expanded = SessionLogs().read("claude", log(path, rows))
+    plan = importing.preview_logs([expanded])
+    assert plan.existing == 1 and len(plan.added) == 3 and not plan.held
+    assert importing.apply(plan, pairs) == 3
+    assert archive.existing("person", first.conversations[0].source) == original
+    assert not importing.preview_logs([expanded]).added
+
+
+@pytest.mark.parametrize("variant", ["valid", "other-prompt", "not-meta", "cycle"])
+def test_ST_102_003_IT_102_002_Stopの付加文は元発話を照合して越える(
+    tmp_path: Path, variant: str
+) -> None:
+    first = user("u", None, "質問")
+    first["promptId"] = "prompt"
+    feedback = user("feedback", "a1", "Stop hook feedback:\n確認を続けてください")
+    feedback.update(isMeta=True, promptId="prompt")
+    if variant == "other-prompt":
+        feedback["promptId"] = "other"
+    elif variant == "not-meta":
+        feedback["isMeta"] = False
+    elif variant == "cycle":
+        feedback["parentUuid"] = "feedback"
+    result = SessionLogs().read(
+        "claude",
+        log(
+            tmp_path / "feedback.jsonl",
+            [
+                first,
+                answer("a1", "u", "最初"),
+                feedback,
+                answer("a2", "feedback", "続き"),
+            ],
+        ),
+    )
+    if variant == "valid":
+        assert [row.reply for row in result.conversations] == ["最初", "続き"]
+        assert result.conversations[1].turn == "u:a2"
+        assert all(row.native_source == "claude:prompt" for row in result.conversations)
+    elif variant == "not-meta":
+        assert result.conversations[1].turn == "feedback"
+    else:
+        assert [row.reply for row in result.conversations] == ["最初"]
